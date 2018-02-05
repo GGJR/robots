@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+
+<workspace>
+  <project>
+    <path>$WS_DIR$\projects\blinkyBare\blinkyBare.ewp</path>
+  </project>
+  <project>
+    <path>$WS_DIR$\projects\blinkyFree\blinkyFree.ewp</path>
+  </project>
+  <project>
+    <path>$WS_DIR$\projects\blinkyMicrium\blinkyMicrium.ewp</path>
+  </project>
+  <project>
+    <path>$WS_DIR$\projects\blinkyTT\blinkyTT.ewp</path>
+  </project>
+  <project>
+    <path>$WS_DIR$\projects\canReceiverInterruptDriven\canReceiverInterruptDriven.ewp</path>
+  </project>
+  <project>
+    <path>$WS_DIR$\projects\canReceiverPolling\canReceiverPolling.ewp</path>
+  </project>
+  <project>
+    <path>$WS_DIR$\projects\canSender\canSender.ewp</path>
+  </project>
+  <project>
+    <path>$WS_DIR$\projects\convTest\convTest.ewp</path>
+  </project>
+  <project>
+    <path>$WS_DIR$\projects\ctrlTest\ctrlTest.ewp</path>
+  </project>
+  <project>
+    <path>$WS_DIR$\projects\robotTest\robotTest.ewp</path>
+  </project>
+  <batchBuild/>
+</workspace>
+
+
