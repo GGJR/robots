@@ -19,6 +19,7 @@
 #include <buttons.h>
 #include <interface.h>
 #include <conveyor.h>
+#include <can.h>
 
 /*************************************************************************
 *                  PRIORITIES
@@ -112,6 +113,14 @@ static void appTaskMonitorSens(void *pdata) {
 }
 
 static void appTaskCtrlConv(void *pdata) {
+  //CAN
+    canMessage_t rxMsg;
+    if (canReady(CAN_PORT_1)) {  
+      canRead(CAN_PORT_1, &rxMsg);
+    }
+  
+  
+  
     osStartTick();
     
     //testing vars
@@ -160,29 +169,7 @@ static void appTaskCtrlConv(void *pdata) {
     
     
     //joystick
-    if (jsLTPressed && (!isButtonPressedInState(btnState, JS_LEFT))) {
-            jsLTPressed = false;
-                  
-    }else if (jsRTPressed && (!isButtonPressedInState(btnState, JS_RIGHT))) {
-            jsRTPressed = false;
-
-    }else if (jsUpPressed && (!isButtonPressedInState(btnState, JS_UP))) {
-            jsUpPressed = false;
-                        conveyorSetState(CONVEYOR_OFF);
-
-    }else if (jsDownPressed && (!isButtonPressedInState(btnState, JS_DOWN))) {
-            jsDownPressed = false;
-                        conveyorSetState(CONVEYOR_OFF);
-
-    }else if (jsCentPressed && (!isButtonPressedInState(btnState, JS_CENTRE))) {
-            jsCentPressed = false;
-            conveyorSetState(CONVEYOR_OFF);    
-            blockCount=0;
-            
-    }else if (but1Pressed && (!isButtonPressedInState(btnState, BUT_1))) {//left button
-            but1Pressed = false;
-            stopConv=77;
-            /**
+                /**
             if(emergencyStop){
               conveyorSetState(CONVEYOR_OFF);
               //send can ACK
@@ -199,11 +186,30 @@ static void appTaskCtrlConv(void *pdata) {
               start();
               //send can ACK
               }
-            **/        
+            **/ 
+    if (jsLTPressed && (!isButtonPressedInState(btnState, JS_LEFT))) {
+            jsLTPressed = false;
+            stopConv=77; 
+    }else if (jsRTPressed && (!isButtonPressedInState(btnState, JS_RIGHT))) {
+            jsRTPressed = false;
+             stopConv=77;
+    }else if (jsUpPressed && (!isButtonPressedInState(btnState, JS_UP))) {
+            jsUpPressed = false;
+                stopConv=77;
+    }else if (jsDownPressed && (!isButtonPressedInState(btnState, JS_DOWN))) {
+            jsDownPressed = false;
+             stopConv=77;
+    }else if (jsCentPressed && (!isButtonPressedInState(btnState, JS_CENTRE))) {
+            jsCentPressed = false;
+            stopConv=77;
+
+    }else if (but1Pressed && (!isButtonPressedInState(btnState, BUT_1))) {//left button
+            but1Pressed = false;
+      
     }else if (but2Pressed && (!isButtonPressedInState(btnState, BUT_2))) {//right button
             but2Pressed = false;
-          
-
+            conveyorSetState(CONVEYOR_OFF);    
+            blockCount=0;                      
     }
 
     //CONVEYOR_FORWARD
@@ -214,9 +220,9 @@ static void appTaskCtrlConv(void *pdata) {
     }
     if (stopConv && conveyorItemPresent(CONVEYOR_SENSOR_2) && !conveyorItemPresent(CONVEYOR_SENSOR_1)){
       x2=21;
-      OSTimeDly(1000);
+      OSTimeDly(1500);
       conveyorSetState(CONVEYOR_REVERSE);
-      OSTimeDly(1000);
+      OSTimeDly(10);
       blockCount++;
       stopConv=0;
     }else if(!convEnd && !stopConv && blockCount && !conveyorItemPresent(CONVEYOR_SENSOR_1)){
