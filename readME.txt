@@ -1,1 +1,0 @@
-//This is just an initial test how Git hub works with Desktop app
