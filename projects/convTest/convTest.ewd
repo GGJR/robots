@@ -45,7 +45,7 @@
         </option>
         <option>
           <name>MemFile</name>
-          <state>$TOOLKIT_DIR$\CONFIG\debugger\NXP\LPC2378.ddf</state>
+          <state>$TOOLKIT_DIR$\CONFIG\debugger\NXP\iolpc2378.ddf</state>
         </option>
         <option>
           <name>RunToEnable</name>
@@ -89,7 +89,7 @@
         </option>
         <option>
           <name>OCLastSavedByProductVersion</name>
-          <state>7.40.3.8937</state>
+          <state>6.21.3.52923</state>
         </option>
         <option>
           <name>OCDownloadAttachToProgram</name>
@@ -117,7 +117,7 @@
         </option>
         <option>
           <name>FlashLoadersV3</name>
-          <state>$TOOLKIT_DIR$\config\flashloader\NXP\FlashNXPLPC512K2.board</state>
+          <state>$TOOLKIT_DIR$\config\flashloader\NXP\FlashNXPLPC512k2.board</state>
         </option>
         <option>
           <name>OCImagesSuppressCheck1</name>
@@ -185,7 +185,7 @@
         </option>
         <option>
           <name>OCMulticoreNrOfCores</name>
-          <state>1</state>
+          <state></state>
         </option>
         <option>
           <name>OCMulticoreMaster</name>
@@ -914,7 +914,7 @@
         </option>
         <option>
           <name>CCCpuClockEdit</name>
-          <state></state>
+          <state>72.0</state>
         </option>
         <option>
           <name>CCSwoClockAuto</name>

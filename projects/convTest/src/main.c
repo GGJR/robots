@@ -15,20 +15,17 @@
 #include <bsp.h>
 #include <osutils.h>
 #include <leds.h>
-#include <lcd.h>
 #include <buttons.h>
 #include <interface.h>
 #include <conveyor.h>
-#include <can.h>
 
 /*************************************************************************
 *                  PRIORITIES
 *************************************************************************/
 
 enum {
-  APP_TASK_CTRL_CONV_PRIO = 4,
-  APP_TASK_MONITOR_SENS_PRIO
-  
+  APP_TASK_MONITOR_SENS_PRIO = 4,
+  APP_TASK_CTRL_CONV_PRIO
 };
 
 /*************************************************************************
@@ -113,162 +110,53 @@ static void appTaskMonitorSens(void *pdata) {
 }
 
 static void appTaskCtrlConv(void *pdata) {
-  //CAN
-    canMessage_t rxMsg;
-    if (canReady(CAN_PORT_1)) {  
-      canRead(CAN_PORT_1, &rxMsg);
-    }
-  
-  
-  
-    osStartTick();
-    
-    //testing vars
-    uint32_t x1=98;
-    uint32_t x2=99;
-    
   uint32_t btnState;
-  uint8_t blockCount=0;
   
-  uint8_t stopConv=0;
-  uint8_t convEnd=0;
   while (true) {
-    
-    static bool jsRTPressed = false;// right
-    static bool jsLTPressed = false;// left
-    static bool jsUpPressed = false;// up
-    static bool jsDownPressed = false;// down
-    static bool jsCentPressed = false;// centre
-    
-    static bool but1Pressed = false;// but1
-    static bool but2Pressed = false;// but2
-
-    //static bool sensor1 = false;
-    //static bool sensor2 = false;
-    
-    
+    static bool jsLRPressed = false;
+    static bool jsUpPressed = false;
+    static bool jsDownPressed = false;
     btnState = buttonsRead();
 
-    if (isButtonPressedInState(btnState, JS_LEFT)) {
-      jsLTPressed = true;
-    }else if (isButtonPressedInState(btnState, JS_RIGHT)) {
-      jsRTPressed = true;
-    }else if (isButtonPressedInState(btnState, JS_UP)) {
-      jsUpPressed = true;
-    }else if (isButtonPressedInState(btnState, JS_DOWN)) {
-      jsDownPressed = true;
-    }else if (isButtonPressedInState(btnState, JS_CENTRE)) {
-      jsCentPressed = true;
-      
-     
-    }else if (isButtonPressedInState(btnState, BUT_1)) {
-      but1Pressed = true;
-    }else if (isButtonPressedInState(btnState, BUT_2)) {
-      but2Pressed = true;
+    if (isButtonPressedInState(btnState, JS_LEFT) || 
+        isButtonPressedInState(btnState, JS_RIGHT)) {
+      jsLRPressed = true;
     }
-    
-    
-    //joystick
-                /**
-            if(emergencyStop){
-              conveyorSetState(CONVEYOR_OFF);
-              //send can ACK
-            }
-            if(pause){
-              conveyorSetState(CONVEYOR_OFF);
-              //send can ACK
-              }
-            if(resume){
-              resume();
-              //send can ACK
-              }
-            if(start){
-              start();
-              //send can ACK
-              }
-            **/ 
-    if (jsLTPressed && (!isButtonPressedInState(btnState, JS_LEFT))) {
-            jsLTPressed = false;
-            stopConv=77; 
-    }else if (jsRTPressed && (!isButtonPressedInState(btnState, JS_RIGHT))) {
-            jsRTPressed = false;
-             stopConv=77;
-    }else if (jsUpPressed && (!isButtonPressedInState(btnState, JS_UP))) {
-            jsUpPressed = false;
-                stopConv=77;
-    }else if (jsDownPressed && (!isButtonPressedInState(btnState, JS_DOWN))) {
-            jsDownPressed = false;
-             stopConv=77;
-    }else if (jsCentPressed && (!isButtonPressedInState(btnState, JS_CENTRE))) {
-            jsCentPressed = false;
-            stopConv=77;
-
-    }else if (but1Pressed && (!isButtonPressedInState(btnState, BUT_1))) {//left button
-            but1Pressed = false;
-      
-    }else if (but2Pressed && (!isButtonPressedInState(btnState, BUT_2))) {//right button
-            but2Pressed = false;
-            conveyorSetState(CONVEYOR_OFF);    
-            blockCount=0;                      
-    }
-
-    //CONVEYOR_FORWARD
-    //CONVEYOR_REVERSE
-    if(stopConv){
-           x1=11;
-          conveyorSetState(CONVEYOR_OFF);
-    }
-    if (stopConv && conveyorItemPresent(CONVEYOR_SENSOR_2) && !conveyorItemPresent(CONVEYOR_SENSOR_1)){
-      x2=21;
-      OSTimeDly(1500);
-      conveyorSetState(CONVEYOR_REVERSE);
-      OSTimeDly(10);
-      blockCount++;
-      stopConv=0;
-    }else if(!convEnd && !stopConv && blockCount && !conveyorItemPresent(CONVEYOR_SENSOR_1)){
-      x2=23;
-      //makes the conveyer more responsive after removals
-      if(conveyorGetState() !=CONVEYOR_REVERSE){
-        conveyorSetState(CONVEYOR_REVERSE);
-      }
-      //normal running
-    }else if(!convEnd && conveyorItemPresent(CONVEYOR_SENSOR_1)){
-      x2=24;
+    if (jsLRPressed && (!isButtonPressedInState(btnState, JS_LEFT))
+                    && (!isButtonPressedInState(btnState, JS_RIGHT))) {
+      jsLRPressed = false;
       conveyorSetState(CONVEYOR_OFF);
-      //notify robot 2 for pickup
-      convEnd=66;
-    }else if(convEnd && !conveyorItemPresent(CONVEYOR_SENSOR_1)){
-      x2=25;
-      //successful removal
-      //recieve ACK
-      convEnd=0;
-      if(blockCount>0){
-        blockCount--;
-      }    
-      OSTimeDly(1000);
+    }
+
+    if (isButtonPressedInState(btnState, JS_UP)) {
+      jsUpPressed = true;
+    }
+    if (jsUpPressed && (!isButtonPressedInState(btnState, JS_UP))) {
+      jsUpPressed = false;
+      conveyorSetState(CONVEYOR_OFF);
+      OSTimeDly(250);
+      conveyorSetState(CONVEYOR_FORWARD);
     }
     
+    if (isButtonPressedInState(btnState, JS_DOWN)) {
+      jsDownPressed = true;
+    }
+    if (jsDownPressed && (!isButtonPressedInState(btnState, JS_DOWN))) {
+      jsDownPressed = false;
+      conveyorSetState(CONVEYOR_OFF);
+      OSTimeDly(250);
+      conveyorSetState(CONVEYOR_REVERSE);
+    }
+    
+    if (conveyorItemPresent(CONVEYOR_SENSOR_1) &&
+        conveyorGetState() == CONVEYOR_REVERSE) {
+      conveyorSetState(CONVEYOR_OFF);
+    } 
 
-
-
-    
-    //conveyer display
-    lcdSetTextPos(2, 1);
-    lcdWrite("blockCount : %4u",blockCount);
-    lcdSetTextPos(2, 2);
-    lcdWrite("stopConv : %4u",stopConv);
-    lcdSetTextPos(2, 3);
-    lcdWrite("convEnd : %4u",convEnd);
-    lcdSetTextPos(2, 4);
-    lcdWrite("X1 %4u",x1);
-    lcdSetTextPos(2, 5);
-    lcdWrite("X2 %4u",x2);
-    lcdSetTextPos(2, 6);
-    lcdSetTextPos(2, 7);
-    lcdSetTextPos(2, 8);
-    
-    
-    
+    if (conveyorItemPresent(CONVEYOR_SENSOR_2) &&
+        conveyorGetState() == CONVEYOR_FORWARD) {
+      conveyorSetState(CONVEYOR_OFF);
+    } 
   } 
 }
 
