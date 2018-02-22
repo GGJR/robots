@@ -1,24 +1,24 @@
-"C:\Users\student\Downloads\dk0-pcell-fd115bde695d (1)\dk0-pcell-fd115bde695d\bsp\src\adc.c"
+"C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\bsp\src\adc.c"
 -std=c99
 -ferror-limit=100
 -I
 C:\Program Files (x86)\IAR Systems\Embedded Workbench 7.2\arm\INC\NXP
 -I
-C:\Users\student\Downloads\dk0-pcell-fd115bde695d (1)\dk0-pcell-fd115bde695d\projects\convTest\include
+C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\projects\convTest\include
 -I
-C:\Users\student\Downloads\dk0-pcell-fd115bde695d (1)\dk0-pcell-fd115bde695d\projects\convTest\..\..\bsp\include
+C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\projects\convTest\..\..\bsp\include
 -I
-C:\Users\student\Downloads\dk0-pcell-fd115bde695d (1)\dk0-pcell-fd115bde695d\projects\convTest\..\..\cell\include
+C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\projects\convTest\..\..\cell\include
 -I
-C:\Users\student\Downloads\dk0-pcell-fd115bde695d (1)\dk0-pcell-fd115bde695d\projects\convTest\..\..\Micrium\Software\ucos-ii\ports\arm\generic\iar
+C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\projects\convTest\..\..\Micrium\Software\ucos-ii\ports\arm\generic\iar
 -I
-C:\Users\student\Downloads\dk0-pcell-fd115bde695d (1)\dk0-pcell-fd115bde695d\projects\convTest\..\..\Micrium\Software\ucos-ii\source
+C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\projects\convTest\..\..\Micrium\Software\ucos-ii\source
 -I
-C:\Users\student\Downloads\dk0-pcell-fd115bde695d (1)\dk0-pcell-fd115bde695d\projects\convTest\..\..\Micrium\Software\uc-lib
+C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\projects\convTest\..\..\Micrium\Software\uc-lib
 -I
-C:\Users\student\Downloads\dk0-pcell-fd115bde695d (1)\dk0-pcell-fd115bde695d\projects\convTest\..\..\Micrium\Software\uc-cpu
+C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\projects\convTest\..\..\Micrium\Software\uc-cpu
 -I
-C:\Users\student\Downloads\dk0-pcell-fd115bde695d (1)\dk0-pcell-fd115bde695d\projects\convTest\..\..\Micrium\Software\uc-cpu\arm\IAR
+C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\projects\convTest\..\..\Micrium\Software\uc-cpu\arm\IAR
 -I
 C:\Program Files (x86)\IAR Systems\Embedded Workbench 7.2\arm\inc
 -I
@@ -26,21 +26,21 @@ C:\Program Files (x86)\IAR Systems\Embedded Workbench 7.2\arm\inc\c
 -I
 C:\Program Files (x86)\IAR Systems\Embedded Workbench 7.2\arm\INC\NXP
 -I
-C:\Users\student\Downloads\dk0-pcell-fd115bde695d (1)\dk0-pcell-fd115bde695d\projects\convTest\include
+C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\projects\convTest\include
 -I
-C:\Users\student\Downloads\dk0-pcell-fd115bde695d (1)\dk0-pcell-fd115bde695d\bsp\include
+C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\bsp\include
 -I
-C:\Users\student\Downloads\dk0-pcell-fd115bde695d (1)\dk0-pcell-fd115bde695d\cell\include
+C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\cell\include
 -I
-C:\Users\student\Downloads\dk0-pcell-fd115bde695d (1)\dk0-pcell-fd115bde695d\Micrium\Software\ucos-ii\ports\arm\generic\iar
+C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\Micrium\Software\ucos-ii\ports\arm\generic\iar
 -I
-C:\Users\student\Downloads\dk0-pcell-fd115bde695d (1)\dk0-pcell-fd115bde695d\Micrium\Software\ucos-ii\source
+C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\Micrium\Software\ucos-ii\source
 -I
-C:\Users\student\Downloads\dk0-pcell-fd115bde695d (1)\dk0-pcell-fd115bde695d\Micrium\Software\uc-lib
+C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\Micrium\Software\uc-lib
 -I
-C:\Users\student\Downloads\dk0-pcell-fd115bde695d (1)\dk0-pcell-fd115bde695d\Micrium\Software\uc-cpu
+C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\Micrium\Software\uc-cpu
 -I
-C:\Users\student\Downloads\dk0-pcell-fd115bde695d (1)\dk0-pcell-fd115bde695d\Micrium\Software\uc-cpu\arm\IAR
+C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\Micrium\Software\uc-cpu\arm\IAR
 -DIAR_LPC_2378_SK=1
 -D__CHAR_BITS__=8
 -D__CHAR_MAX__=0xff
