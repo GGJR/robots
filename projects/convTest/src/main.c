@@ -8,6 +8,11 @@
 *
 * item sensed at 1 and moving in reverse -> stop
 * item sensed at 2 and moving forward -> stop
+
+Gruff James
+Date-22/02/18
+
+
 */
 
 #include <stdbool.h>
@@ -202,8 +207,10 @@ static void appTaskCtrlConv(void *pdata) {
   uint8_t convEnd=0;
   uint8_t start=0;
   uint8_t emStop=0;
+  //
   while (true) {
     ///**
+    //starting loop
     while(msg.id!=START&&(msg.id!=RESET)){
     OSSemPend(can1RxSem, 0, &error);
     msg = can1RxBuf;
@@ -224,12 +231,15 @@ static void appTaskCtrlConv(void *pdata) {
       msgOut.dataA=blockCount;
       txOk = canWrite(CAN_PORT_1, &msgOut);
     }
+    //main running loop
     while (true) {
+      msg.id=0;
       ///**  //Event-Driven
       OSSemPend(can1RxSem, 0, &error);
       msg = can1RxBuf;
       
       ///**
+      //checks for emergency stop
       if(msg.id==EM_STOP){
         msgOut.id=EM_STOP_ACK_CONV;
         msgOut.dataA=blockCount;
@@ -251,14 +261,14 @@ static void appTaskCtrlConv(void *pdata) {
       INT32U timeX2 = OSTimeGet();
       
       
-      uint32_t timeOut=10000;
+      uint32_t timeOut=1000000;
       if(blockCount){
         y1=OSTimeGet();
         //y1=readWatch();  
         y3=y1-y2;
         y2=y1;
         blockTimeOut1+=y3;
-        if(blockTimeOut1>timeOut){
+        if(blockTimeOut1>timeOut &&!stopConv){
           msgOut.id=ERR_CONV;
           msgOut.dataA=blockCount;
           txOk = canWrite(CAN_PORT_1, &msgOut);

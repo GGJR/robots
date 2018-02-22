@@ -1,5 +1,5 @@
 [DebugChecksum]
-Checksum=-185844348
+Checksum=372805758
 [Exceptions]
 StopOnUncaught=_ 0
 StopOnThrow=_ 0
@@ -38,5 +38,6 @@ mode=0
 [Breakpoints2]
 Count=0
 [Aliases]
-Count=0
+A0=_ "C:\Users\student\Downloads\dk0-pcell-fd115bde695d (1)\dk0-pcell-fd115bde695d\Micrium\Software\uCOS-II\Source\os_sem.c" ""
+Count=1
 SuppressDialog=0
