@@ -25,7 +25,7 @@ if not "%1" == "" goto debugFile
 
 @echo on 
 
-"C:\Program Files (x86)\IAR Systems\Embedded Workbench 7.2\common\bin\cspybat" -f "C:\Users\student\Music\s\dk0-pcell-fd115bde695d\projects\convTest\settings\convTest.Flash.general.xcl" --backend -f "C:\Users\student\Music\s\dk0-pcell-fd115bde695d\projects\convTest\settings\convTest.Flash.driver.xcl" 
+"C:\Program Files (x86)\IAR Systems\Embedded Workbench 7.2\common\bin\cspybat" -f "C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\projects\convTest\settings\convTest.Flash.general.xcl" --backend -f "C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\projects\convTest\settings\convTest.Flash.driver.xcl" 
 
 @echo off 
 goto end 
@@ -34,7 +34,7 @@ goto end
 
 @echo on 
 
-"C:\Program Files (x86)\IAR Systems\Embedded Workbench 7.2\common\bin\cspybat" -f "C:\Users\student\Music\s\dk0-pcell-fd115bde695d\projects\convTest\settings\convTest.Flash.general.xcl" "--debug_file=%1" --backend -f "C:\Users\student\Music\s\dk0-pcell-fd115bde695d\projects\convTest\settings\convTest.Flash.driver.xcl" 
+"C:\Program Files (x86)\IAR Systems\Embedded Workbench 7.2\common\bin\cspybat" -f "C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\projects\convTest\settings\convTest.Flash.general.xcl" "--debug_file=%1" --backend -f "C:\Users\student\Documents\w13007276\dk0-pcell-fd115bde695d\projects\convTest\settings\convTest.Flash.driver.xcl" 
 
 @echo off 
 :end
