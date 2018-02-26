@@ -5,9 +5,7 @@
   <fileChecksum>1360120014</fileChecksum>
   <configuration>
     <name>Flash</name>
-    <outputs>
-      <file>$PROJ_DIR$\src\main.c</file>
-    </outputs>
+    <outputs/>
     <forcedrebuild>
       <name>[MULTI_TOOL]</name>
       <tool>ILINK</tool>
