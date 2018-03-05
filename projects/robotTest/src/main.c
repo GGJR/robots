@@ -196,7 +196,7 @@ static void appTaskButtons(void *pdata) {
   osStartTick();
   
    //Local variables
-uint32_t counter=0;
+    uint32_t counter=0;
     uint32_t RUNNING = 0;
     uint32_t PAD_WAITING = 0;
     uint32_t BLOCK_IN_TRANSIT = 0;
@@ -207,7 +207,7 @@ uint32_t counter=0;
    * Now execute the main task loop for this task
    */     
   while ( true ) {
-      OSSemPend(can1RxSem, 0, &error);
+    OSSemPend(can1RxSem, 0, &error);
     msg = can1RxBuf;
     
     if(msg.id == START && !RUNNING)
@@ -223,7 +223,6 @@ uint32_t counter=0;
       
       msg.id = START_ACK_ROB1;
       canWrite(CAN_PORT_1, &msg);
-      
     }
     
     if(msg.id == REQ_PICKUP_PAD1)
@@ -234,12 +233,10 @@ uint32_t counter=0;
       canWrite(CAN_PORT_1, &msg);
     }
     
- 
-    
-    
     if(PAD_WAITING && !BLOCK_IN_TRANSIT)
     {
-            counter++;
+      
+      counter++;
 
       PAD_WAITING = 0;//false
       robotMoveJointTo(ROBOT_ELBOW, 83500);
@@ -255,13 +252,13 @@ uint32_t counter=0;
       robotMoveJointTo(ROBOT_HAND, 68750);
       OSTimeDly(500);
       robotMoveJointTo(ROBOT_ELBOW, 83500);
-      OSTimeDly(500);
-      
+     
+      OSTimeDly(2000);
       
       msg.id = CHK_PAD1_PICKUP;
       canWrite(CAN_PORT_1, &msg); 
       //WAITING_ON_MESSAGE = true;
-      OSTimeDly(500);
+      
     }
     
     if(msg.id == NACK_CHK_PAD1_PICKUP) 
@@ -270,7 +267,6 @@ uint32_t counter=0;
       BLOCK_IN_TRANSIT = 0; //false
     }
    
-    
     //successful pickup 
     if(msg.id == ACK_CHK_PAD1_PICKUP) 
     {
@@ -290,10 +286,8 @@ uint32_t counter=0;
       canWrite(CAN_PORT_1, &msg);
     }
     
-   
     if(msg.id == ACK_DROP_CONV && BLOCK_IN_TRANSIT) 
     {
-
       robotMoveJointTo(ROBOT_ELBOW, 100000);
       OSTimeDly(500);
       robotMoveJointTo(ROBOT_HAND, 45000);

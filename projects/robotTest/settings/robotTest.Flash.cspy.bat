@@ -25,7 +25,7 @@ if not "%1" == "" goto debugFile
 
 @echo on 
 
-"C:\Program Files (x86)\IAR Systems\Embedded Workbench 7.2\common\bin\cspybat" -f "C:\Users\student\Music\s\dk0-pcell-fd115bde695d\projects\robotTest\settings\robotTest.Flash.general.xcl" --backend -f "C:\Users\student\Music\s\dk0-pcell-fd115bde695d\projects\robotTest\settings\robotTest.Flash.driver.xcl" 
+"C:\Program Files (x86)\IAR Systems\Embedded Workbench 7.2\common\bin\cspybat" -f "C:\Users\student\Music\robots\projects\robotTest\settings\robotTest.Flash.general.xcl" --backend -f "C:\Users\student\Music\robots\projects\robotTest\settings\robotTest.Flash.driver.xcl" 
 
 @echo off 
 goto end 
@@ -34,7 +34,7 @@ goto end
 
 @echo on 
 
-"C:\Program Files (x86)\IAR Systems\Embedded Workbench 7.2\common\bin\cspybat" -f "C:\Users\student\Music\s\dk0-pcell-fd115bde695d\projects\robotTest\settings\robotTest.Flash.general.xcl" "--debug_file=%1" --backend -f "C:\Users\student\Music\s\dk0-pcell-fd115bde695d\projects\robotTest\settings\robotTest.Flash.driver.xcl" 
+"C:\Program Files (x86)\IAR Systems\Embedded Workbench 7.2\common\bin\cspybat" -f "C:\Users\student\Music\robots\projects\robotTest\settings\robotTest.Flash.general.xcl" "--debug_file=%1" --backend -f "C:\Users\student\Music\robots\projects\robotTest\settings\robotTest.Flash.driver.xcl" 
 
 @echo off 
 :end
