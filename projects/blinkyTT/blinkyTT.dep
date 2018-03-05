@@ -5,36 +5,7 @@
   <fileChecksum>1206447483</fileChecksum>
   <configuration>
     <name>Flash</name>
-    <outputs>
-      <file>$PROJ_DIR$\..\..\bsp\include\adc.h</file>
-      <file>$PROJ_DIR$\..\..\bsp\include\accelerometer.h</file>
-      <file>$PROJ_DIR$\..\..\bsp\include\bsp.h</file>
-      <file>$PROJ_DIR$\..\..\bsp\include\buttons.h</file>
-      <file>$PROJ_DIR$\..\..\bsp\include\can.h</file>
-      <file>$PROJ_DIR$\..\..\bsp\include\delay.h</file>
-      <file>$PROJ_DIR$\..\..\bsp\include\lcd.h</file>
-      <file>$PROJ_DIR$\..\..\bsp\include\leds.h</file>
-      <file>$PROJ_DIR$\..\..\bsp\include\potentiometer.h</file>
-      <file>$PROJ_DIR$\..\..\bsp\include\pwm.h</file>
-      <file>$PROJ_DIR$\..\..\bsp\include\timers.h</file>
-      <file>$PROJ_DIR$\..\..\bsp\src\lcd\fonts\Terminal_9_12x6.c</file>
-      <file>$PROJ_DIR$\..\..\bsp\src\lcd\drv_glcd.c</file>
-      <file>$PROJ_DIR$\..\..\bsp\src\lcd\glcd_ll.c</file>
-      <file>$PROJ_DIR$\..\..\bsp\src\adc.c</file>
-      <file>$PROJ_DIR$\..\..\bsp\src\accelerometer.c</file>
-      <file>$PROJ_DIR$\..\..\bsp\src\bsp.c</file>
-      <file>$PROJ_DIR$\..\..\bsp\src\buttons.c</file>
-      <file>$PROJ_DIR$\..\..\bsp\src\can.c</file>
-      <file>$PROJ_DIR$\..\..\bsp\src\delay.c</file>
-      <file>$PROJ_DIR$\..\..\bsp\src\lcd.c</file>
-      <file>$PROJ_DIR$\..\..\bsp\src\leds.c</file>
-      <file>$PROJ_DIR$\..\..\bsp\src\potentiometer.c</file>
-      <file>$PROJ_DIR$\..\..\bsp\src\pwm.c</file>
-      <file>$PROJ_DIR$\..\..\bsp\src\timers.c</file>
-      <file>$PROJ_DIR$\..\..\TTSched\src\scheduler.c</file>
-      <file>$PROJ_DIR$\include\ttSchedConfig.h</file>
-      <file>$PROJ_DIR$\src\main.c</file>
-    </outputs>
+    <outputs/>
     <forcedrebuild>
       <name>[MULTI_TOOL]</name>
       <tool>ILINK</tool>

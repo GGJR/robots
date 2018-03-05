@@ -63,8 +63,8 @@ static void appTaskCtrlConv(void *pdata);
 
 uint32_t readWatch(void);                 //Reads the watch and returns it's value
 static void canHandler(void);
-static void displayInfo(canMessage_t mes,uint8_t blockCount,uint8_t stopConv,uint8_t convEnd,uint8_t start,uint8_t emStop,INT32U blockTimeOut,INT32U blockTimeOut2);
-static void displayInfo1(canMessage_t mes,uint8_t blockCount,uint8_t stopConv,uint8_t convEnd,uint8_t start,uint8_t emStop,INT32U blockTimeOut,INT32U blockTimeOut2);
+static void displayInfo(canMessage_t mes,uint8_t blockCount,uint8_t stopConv,uint8_t convEnd,uint8_t start,uint8_t emStop,INT32U blockTimeOut );
+static void displayInfo1(canMessage_t mes,uint8_t blockCount,uint8_t stopConv,uint8_t convEnd,uint8_t start,uint8_t emStop,INT32U blockTimeOut );
 
 static void sendMes(  uint8_t blockCount,uint32_t mesID);
 
@@ -74,9 +74,14 @@ static void sendMes(  uint8_t blockCount,uint32_t mesID);
 *************************************************************************/
 
 static OS_EVENT *can1RxSem;
+static OS_EVENT *LCDsem;
+INT8U error;
+
 static canMessage_t can1RxBuf;
 
 int main() {
+    uint8_t error;
+
   /* Initialise the hardware */
   bspInit();
   conveyorInit();
@@ -97,6 +102,8 @@ int main() {
   
   /* Start the OS */
   //can1RxSem = OSSemCreate(0);//Event-Driven
+    LCDsem = OSSemCreate(1);
+
   initWatch();
   startWatch();
   OSStart();                                                  
@@ -140,6 +147,10 @@ static void appTaskMonitorSens(void *pdata) {
     }
     OSSemPend(can1RxSem, 0, &error);
     msgGlobal = can1RxBuf;
+    
+    ///**
+
+    //**/
     OSTimeDly(20);
   }
 }
@@ -152,22 +163,22 @@ uint32_t y3=0;
 static void appTaskCtrlConv(void *pdata) {
   //CAN
   //read
-  uint8_t error;
+ // uint8_t error;
   canMessage_t msg;
   //canRxInterrupt(canHandler);//Event-Driven
   
   //write
-  canMessage_t msgOut;
-  bool txOk = false;
+  //canMessage_t msgOut;
+  //bool txOk = false;
   
   INT32U blockTimeOut1=0;
-  INT32U blockTimeOut2=0;
+  //INT32U blockTimeOut2=0;
   
   osStartTick();
   
   //testing vars
-  uint32_t x1=98;
-  uint32_t x2=99;
+  //uint32_t x1=98;
+  //uint32_t x2=99;
   
   uint32_t btnState;
   uint8_t blockCount=0;
@@ -181,7 +192,7 @@ static void appTaskCtrlConv(void *pdata) {
     //starting loop & in emergency stop
     while(msg.id!=START&&(msg.id!=RESET)){
       msg=msgGlobal;
-      displayInfo( msg, blockCount, stopConv, convEnd, start, emStop,blockTimeOut1, blockTimeOut2);
+      displayInfo( msg, blockCount, stopConv, convEnd, start, emStop,blockTimeOut1);
     }
     start=41;
     if(emStop){
@@ -211,7 +222,9 @@ static void appTaskCtrlConv(void *pdata) {
       }      
       //INT32U timeX1 = OSTimeGet();
       //INT32U timeX2 = OSTimeGet();
-      
+      //
+
+      //
       
       uint32_t timeOut=1000000;
       
@@ -233,11 +246,10 @@ static void appTaskCtrlConv(void *pdata) {
       }else{
         blockTimeOut1=0;
       }
+      //breaks without
       y1=OSTimeGet();
-      //y1=readWatch();  
       y3=y1-y2;
       y2=y1;
-      blockTimeOut2+=y3;      
       
       //joystick get state
       static bool jsRTPressed = false;// right
@@ -296,36 +308,39 @@ static void appTaskCtrlConv(void *pdata) {
       }
       
       if(stopConv){
-        x1=11;
         conveyorSetState(CONVEYOR_OFF);
       }
       //This is for when a block is dropped on the conveyer
       if (stopConv && conveyorItemPresent(CONVEYOR_SENSOR_2) && !conveyorItemPresent(CONVEYOR_SENSOR_1)){
-        x2=21;
         //sends ACK to robot informing successful drop
         sendMes(blockCount, ACK_CHK_CONV_DROP);
-        OSTimeDly(2500);
+        OSTimeDly(500);//2500
         conveyorSetState(CONVEYOR_REVERSE);
         OSTimeDly(10);
         blockCount++;
         stopConv=0;
         //normal running with conveyer on
       }else if(!convEnd && !stopConv && blockCount && !conveyorItemPresent(CONVEYOR_SENSOR_1)){
-        x2=23;
         if(conveyorGetState() !=CONVEYOR_REVERSE){
           conveyorSetState(CONVEYOR_REVERSE);
         }
         //when a block reaches the end
       }else if(blockCount && !convEnd && conveyorItemPresent(CONVEYOR_SENSOR_1)){
-        x2=24;
         conveyorSetState(CONVEYOR_OFF);
         //notify robot 2 for pickup
         convEnd=66;
-        sendMes(blockCount, REQ_PICKUP_CONV);
+        if(msg.id==ACK_PICKUP_CONV){
+        //uint8_t error;
+        //OSSemPend(LCDsem, 0, &error);
+        lcdWrite("Robot 2 ACK Y ");  
+        lcdSetTextPos(2, 9);
+        //error = OSSemPost(LCDsem);
+        }else{
+          sendMes(blockCount, REQ_PICKUP_CONV);
+        }
         
         // \/this is when a block is removed\/
       }else if(convEnd && !conveyorItemPresent(CONVEYOR_SENSOR_1)){
-        x2=25;
         //successful removal
         //recieve ACK
         convEnd=0;
@@ -336,21 +351,24 @@ static void appTaskCtrlConv(void *pdata) {
         OSTimeDly(1000);
       }
       
-      displayInfo( msg, blockCount, stopConv, convEnd, start, emStop,blockTimeOut1, blockTimeOut2);
+      displayInfo( msg, blockCount, stopConv, convEnd, start, emStop,blockTimeOut1);
     }
-    displayInfo( msg, blockCount, stopConv, convEnd, start, emStop,blockTimeOut1, blockTimeOut2);
+    displayInfo( msg, blockCount, stopConv, convEnd, start, emStop,blockTimeOut1);
   } 
 }
 
 static void displayInfo(canMessage_t mes,uint8_t blockCount,
                         uint8_t stopConv,uint8_t convEnd,uint8_t start,
-                        uint8_t emStop,INT32U blockTimeOut1,
-                        INT32U blockTimeOut2
+                        uint8_t emStop,INT32U blockTimeOut1
                           ){
+                            
                             ///**
                             static uint32_t xxx=4;
                             xxx=mes.id;
                             //conveyer display
+                             // uint8_t error;
+
+                              //  OSSemPend(LCDsem, 0, &error);
                             lcdSetTextPos(2, 1);
                             lcdWrite("blockCount : %4u",blockCount);
                             lcdSetTextPos(2, 2);
@@ -368,35 +386,10 @@ static void displayInfo(canMessage_t mes,uint8_t blockCount,
                             //lcdSetTextPos(2, 8);
                             //lcdWrite("blkTOut %10d          ",blockTimeOut2);  
                             //  **/
+                              //error = OSSemPost(LCDsem);
+
                           }
 
-static void displayInfo1(canMessage_t mes,uint8_t blockCount,
-                         uint8_t stopConv,uint8_t convEnd,uint8_t start,
-                         uint8_t emStop,INT32U blockTimeOut1,
-                         INT32U blockTimeOut2
-                           ){
-                             /**
-                             static uint32_t xxx=4;
-                             xxx=mes.id;
-                             //conveyer display
-                             lcdSetTextPos(2, 1);
-                             lcdWrite("blockCount : %4u",blockCount);
-                             lcdSetTextPos(2, 2);
-                             lcdWrite("stopConv : %4u",stopConv);
-                             //lcdSetTextPos(2, 3);
-                             //lcdWrite("convEnd : %4u",convEnd);
-                             lcdSetTextPos(2, 4);
-                             lcdWrite("CAN.ID %4u          ",xxx);
-                             lcdSetTextPos(2, 5);
-                             lcdWrite("start %4u          ",start);
-                             lcdSetTextPos(2, 6);
-                             lcdWrite("emStop %4u          ",emStop);  
-                             lcdSetTextPos(2, 7);
-                             lcdWrite("blkTOut %10d          ",blockTimeOut1);  
-                             //lcdSetTextPos(2, 8);
-                             //lcdWrite("blkTOut %10d          ",blockTimeOut2);  
-                             //  **/
-                           }
 static void sendMes(  uint8_t blockCount,uint32_t mesID){
   canMessage_t msgOut;
   bool txOk = false;
