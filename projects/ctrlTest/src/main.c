@@ -14,14 +14,22 @@
 #include <buttons.h>
 #include <interface.h>
 #include <control.h>
+#include <messageTable.h>
+#include <can.h>
+#include <lcd.h>
 
 /*************************************************************************
 *                  PRIORITIES
 *************************************************************************/
 
 enum {
-  APP_TASK_MONITOR_SENS_PRIO = 4,
-  APP_TASK_CTRL_PRIO
+  APP_TASK_CAN_RECEIVE_PRIO = 4,
+  APP_TASK_CAN_SEND_PRIO,
+  APP_TASK_MONITOR_SENS_PRIO,
+  APP_TASK_CTRL_PRIO,
+  APP_TASK_CAN_RETRY_PRIO,
+  APP_TASK_LED_PRIO,
+  APP_TASK_LCD_PRIO,
 };
 
 /*************************************************************************
@@ -29,19 +37,78 @@ enum {
 *************************************************************************/
 
 enum {
+  APP_TASK_CAN_RECEIVE_STK_SIZE = 256,
+  APP_TASK_CAN_SEND_STK_SIZE = 256,
   APP_TASK_MONITOR_SENS_STK_SIZE = 256,
-  APP_TASK_CTRL_STK_SIZE = 256
+  APP_TASK_CTRL_STK_SIZE = 256,
+  APP_TASK_CAN_RETRY_STK_SIZE = 256,
+  APP_TASK_LED_STK_SIZE = 256,
+  APP_TASK_LCD_STK_SIZE = 256,
 };
 
+static OS_STK appTaskCanReceiveStk[APP_TASK_CAN_RECEIVE_STK_SIZE];
+static OS_STK appTaskCanSendStk[APP_TASK_CAN_SEND_STK_SIZE];
 static OS_STK appTaskMonitorSensStk[APP_TASK_MONITOR_SENS_STK_SIZE];
 static OS_STK appTaskCtrlStk[APP_TASK_CTRL_STK_SIZE];
+static OS_STK appTaskCanRetryStk[APP_TASK_CAN_RETRY_STK_SIZE];
+static OS_STK appTaskLEDStk[APP_TASK_LED_STK_SIZE];
+static OS_STK appTaskLCDStk[APP_TASK_LCD_STK_SIZE];
+
 
 /*************************************************************************
 *                  APPLICATION FUNCTION PROTOTYPES
 *************************************************************************/
 
+static void appTaskCanSend(void *pdata);
+static void appTaskCanReceive(void *pdata);
 static void appTaskMonitorSens(void *pdata);
 static void appTaskCtrl(void *pdata);
+static void appTaskCanRetry(void *pdata);
+static void appTaskLED(void *pdata);
+static void appTaskLCD(void *pdata);
+
+/*
+*************************************************************************
+*                 LOCAL FUNCTION PROTOTYPES
+*************************************************************************
+*/
+
+static void sendMessage(int message);
+static void canHandler(void);
+static void processRecievedMessage(int message);
+ 
+/*
+*************************************************************************
+*                 GLOBAL VARIABLE DEFINITIONS
+*************************************************************************
+*/
+
+char pendingAckMessageTitle[7][21] = {
+  "EM Stop:             ",
+  "Pause  :             ",
+  "Resume :             ",
+  "Start  :             ",
+  "Stop   :             ",
+  "Reset  :             ",
+  "Pad1Chk:             ",
+};
+
+static OS_EVENT *can1RxSem;
+static OS_EVENT *canSendSem;
+static canMessage_t can1RxBuf;
+static int messageDisplay = -1;
+static int messageSend = -1;
+static int systemState = 0;
+static bool emStopAck[3] = {false, false, false}; // {conveyor, robot1, robot2}
+static bool pauseAck[3] = {false, false, false}; // {conveyor, robot1, robot2}
+static bool resumeAck[3] = {false, false, false}; // {conveyor, robot1, robot2}
+static bool startAck[3] = {false, false, false}; // {conveyor, robot1, robot2}
+static bool stopAck[3] = {false, false, false}; // {conveyor, robot1, robot2}
+static bool resetAck[3] = {false, false, false}; // {conveyor, robot1, robot2}
+static bool pad1BlockAck = false; // {conveyor}
+static bool responsesWaiting[7] = {false, false, false, false, false, false, false}; // {EmergencyStop, Pause, Resume, Start, Stop, Reset, Pad1Block}
+static bool ignorePadInput = false;
+
 
 /*************************************************************************
 *                    GLOBAL FUNCTION DEFINITIONS
@@ -53,24 +120,53 @@ int main() {
   controlInit();
 
   /* Initialise the OS */
-  OSInit();                                                   
+  OSInit();
 
   /* Create Tasks */
-  OSTaskCreate(appTaskMonitorSens,                               
+  OSTaskCreate(appTaskCanSend,
+               (void *)0,
+               (OS_STK *)&appTaskCanSendStk[APP_TASK_CAN_SEND_STK_SIZE - 1],
+               APP_TASK_CAN_SEND_PRIO);
+  
+  OSTaskCreate(appTaskCanReceive,
+               (void *)0,
+               (OS_STK *)&appTaskCanReceiveStk[APP_TASK_CAN_RECEIVE_STK_SIZE - 1],
+               APP_TASK_CAN_RECEIVE_PRIO);
+  
+  OSTaskCreate(appTaskMonitorSens,
                (void *)0,
                (OS_STK *)&appTaskMonitorSensStk[APP_TASK_MONITOR_SENS_STK_SIZE - 1],
                APP_TASK_MONITOR_SENS_PRIO);
    
-  OSTaskCreate(appTaskCtrl,                               
+  OSTaskCreate(appTaskCtrl,
                (void *)0,
                (OS_STK *)&appTaskCtrlStk[APP_TASK_CTRL_STK_SIZE - 1],
                APP_TASK_CTRL_PRIO);
+  
+  OSTaskCreate(appTaskCanRetry,
+               (void *)0,
+               (OS_STK *)&appTaskCanRetryStk[APP_TASK_CAN_RETRY_STK_SIZE - 1],
+               APP_TASK_CAN_RETRY_PRIO);
+  
+  OSTaskCreate(appTaskLED,
+               (void *)0,
+               (OS_STK *)&appTaskLEDStk[APP_TASK_LED_STK_SIZE - 1],
+               APP_TASK_LED_PRIO);
+  
+  OSTaskCreate(appTaskLCD,
+               (void *)0,
+               (OS_STK *)&appTaskLCDStk[APP_TASK_LCD_STK_SIZE - 1],
+               APP_TASK_LCD_PRIO);
+  
+  /* Create Semaphores and Mutexes */
+  can1RxSem = OSSemCreate(0);
+  canSendSem = OSSemCreate(0);
    
   /* Start the OS */
-  OSStart();                                                  
+  OSStart();
   
   /* Should never arrive here */ 
-  return 0;      
+  return 0;
 }
 
 /*************************************************************************
@@ -78,28 +174,23 @@ int main() {
 *************************************************************************/
 
 static void appTaskMonitorSens(void *pdata) {
-    
-  /* Start the OS ticker
-   * (must be done in the highest priority task)
-   */
-  osStartTick();
-  
   /* 
    * Now execute the main task loop for this task
    */
   while (true) {
-    interfaceLedSetState(D1_LED | D2_LED, LED_OFF);
     ledSetState(USB_LINK_LED, LED_OFF);
     ledSetState(USB_CONNECT_LED, LED_OFF);
     
     if (controlItemPresent(CONTROL_SENSOR_1)) {
-        interfaceLedSetState(D1_LED, LED_ON);
-        ledSetState(USB_LINK_LED, LED_ON);
-    } 
+      if (!ignorePadInput) {
+        // Send message to robot1. (informing that there is block
+        sendMessage(REQ_PICKUP_PAD1);
+      }
+      ledSetState(USB_LINK_LED, LED_ON);
+    }
     if (controlItemPresent(CONTROL_SENSOR_2)) {
-        interfaceLedSetState(D2_LED, LED_ON);
         ledSetState(USB_CONNECT_LED, LED_ON);
-    } 
+    }
     
     OSTimeDly(20);
   }
@@ -108,19 +199,673 @@ static void appTaskMonitorSens(void *pdata) {
 static void appTaskCtrl(void *pdata) {
   static bool emergency = false;
   interfaceLedSetState(D3_LED | D4_LED, LED_OFF);
+  uint32_t btnState;
+  bool Btn1 = false;
+  bool Btn2 = false;
+  bool JoyUp = false;
   
   while (true) {
+    btnState = buttonsRead();
+       
+    // Handles button1. (start/stop)
+    if (isButtonPressedInState(btnState, BUT_1)) {
+      Btn1 = true;
+    }
+    if (Btn1 && (!isButtonPressedInState(btnState, BUT_1))) {
+      // Button1 has been pressed and released.
+      Btn1 = false;
+      //if (systemState == SYSTEM_NOT_STARTED || systemState == SYSTEM_STOPPED) {
+      if (true) {
+        sendMessage(START);
+      } else if (systemState == SYSTEM_RUNNING) {
+        sendMessage(CTRL_STOP);
+      }
+    }
+    
+    // Handles button2. (pause/resume)
+    if (isButtonPressedInState(btnState, BUT_2)) {
+      Btn2 = true;
+    }
+    if (Btn2 && (!isButtonPressedInState(btnState, BUT_2))) {
+      // Button2 has been pressed and released.
+      Btn2 = false;
+      if (systemState == SYSTEM_RUNNING) {
+        sendMessage(PAUSE);
+      } else if (systemState == SYSTEM_PAUSED){
+        sendMessage(RESUME);
+      }
+    }
+    
+    // Handles joystick up. (reset)
+    if (isButtonPressedInState(btnState, JS_UP)) {
+      JoyUp = true;
+    }
+    if (JoyUp && (!isButtonPressedInState(btnState, JS_UP))) {
+      // Joystick up has been pressed and released.
+      JoyUp = false;
+      sendMessage(RESET);
+    }
+    
+    // Handles Emergency Stop Button
     emergency = controlEmergencyStopButtonPressed();
     if (emergency) {
-      controlAlarmToggleState();
-      interfaceLedSetState(D4_LED, LED_ON);
+      sendMessage(EM_STOP);
       while (controlEmergencyStopButtonPressed()) {
         OSTimeDly(20);
       }
+    }
+    
+    OSTimeDly(50);
+  }
+}
+
+static void appTaskCanReceive(void *pdata) {
+  uint8_t error;
+  canMessage_t msg;
+  
+  /* Install the CAN interrupt handler and start the OS ticker
+   * (must be done in the highest priority task)
+   */
+  canRxInterrupt(canHandler);
+  osStartTick();
+
+  /*
+   * Now execute the main task loop for this task
+   */
+  while ( true ) {
+    OSSemPend(can1RxSem, 0, &error);
+    msg = can1RxBuf;
+    
+    // Updates the message to display on LCD (for info)
+    messageDisplay = msg.id;
+    
+    // Process message.
+    processRecievedMessage(msg.id);
+  }
+}
+
+static void appTaskCanRetry(void *pdata) {
+  const int RETRY_COUNT = 50;
+  bool waitingForLastTick[7] = {false, false, false, false, false, false, false};
+  int retryAttempts[7] = {RETRY_COUNT, RETRY_COUNT, RETRY_COUNT, RETRY_COUNT, RETRY_COUNT, RETRY_COUNT, RETRY_COUNT};
+  
+  // Handles resending messages if responses are not recieved.
+  while (true) {
+    // Check for emergency stop.
+    if (responsesWaiting[0]) {
+      if (waitingForLastTick[0]) {
+        // If all responses recieved...
+        if (emStopAck[0] && emStopAck[1] && emStopAck[2]) {
+          // Reset values back to default.
+          emStopAck[0] = false;
+          emStopAck[1] = false;
+          emStopAck[2] = false;
+          responsesWaiting[0] = false;
+          waitingForLastTick[0] = false;
+          retryAttempts[0] = RETRY_COUNT;
+          
+          // Update system state.
+          systemState = SYSTEM_EMERGENCY_STOP;
+        } else {
+          // Resend message if not all responses are recieved.
+          retryAttempts[0]--;
+          sendMessage(EM_STOP);
+        }
+      } else {
+        // Helps to identify which messages have recently been sent.
+        waitingForLastTick[0] = true;
+      }
+    }
+    
+    // Check for pause.
+    if (responsesWaiting[1]) {
+      if (waitingForLastTick[1]) {
+        // If all responses recieved...
+        if (pauseAck[0] && pauseAck[1] && pauseAck[2]) {
+          // Reset values back to default.
+          pauseAck[0] = false;
+          pauseAck[1] = false;
+          pauseAck[2] = false;
+          responsesWaiting[1] = false;
+          waitingForLastTick[1] = false;
+          retryAttempts[2] = RETRY_COUNT;
+          
+          // Update system state.
+          systemState = SYSTEM_PAUSED;
+        } else {
+          // Resend message if not all responses are recieved.
+          retryAttempts[1]--;
+          sendMessage(PAUSE);
+        }
+      } else {
+        // Helps to identify which messages have recently been sent.
+        waitingForLastTick[1] = true;
+      }
+    }
+    
+    // Check for resume.
+    if (responsesWaiting[2]) {
+      if (waitingForLastTick[2]) {
+        // If all responses recieved...
+        if (resumeAck[0] && resumeAck[1] && resumeAck[2]) {
+          // Reset values back to default.
+          resumeAck[0] = false;
+          resumeAck[1] = false;
+          resumeAck[2] = false;
+          responsesWaiting[2] = false;
+          waitingForLastTick[2] = false;
+          retryAttempts[2] = RETRY_COUNT;
+          
+          // Update system state.
+          systemState = SYSTEM_RUNNING;
+        } else {
+          // Resend message if not all responses are recieved.
+          retryAttempts[2]--;
+          sendMessage(RESUME);
+        }
+      } else {
+        // Helps to identify which messages have recently been sent.
+        waitingForLastTick[2] = true;
+      }
+    }
+    
+    // Check for start.
+    if (responsesWaiting[3]) {
+      if (waitingForLastTick[3]) {
+        // If all responses recieved...
+        if (startAck[0] && startAck[1] && startAck[2]) {
+          // Reset values back to default.
+          startAck[0] = false;
+          startAck[1] = false;
+          startAck[2] = false;
+          responsesWaiting[3] = false;
+          waitingForLastTick[3] = false;
+          retryAttempts[3] = RETRY_COUNT;
+          
+          // Update system state.
+          systemState = SYSTEM_RUNNING;
+        } else {
+          // Resend message if not all responses are recieved.
+          retryAttempts[3]--;
+          sendMessage(START);
+        }
+      } else {
+        // Helps to identify which messages have recently been sent.
+        waitingForLastTick[3] = true;
+      }
+    }
+    
+    // Check for Stop.
+    if (responsesWaiting[4]) {
+      if (waitingForLastTick[4]) {
+        // If all responses recieved...
+        if (stopAck[0] && stopAck[1] && stopAck[2]) {
+          // Reset values back to default.
+          stopAck[0] = false;
+          stopAck[1] = false;
+          stopAck[2] = false;
+          responsesWaiting[4] = false;
+          waitingForLastTick[4] = false;
+          retryAttempts[4] = RETRY_COUNT;
+          
+          // Update system state.
+          systemState = SYSTEM_STOPPED;
+        } else {
+          // Resend message if not all responses are recieved.
+          retryAttempts[4]--;
+          sendMessage(CTRL_STOP);
+        }
+      } else {
+        // Helps to identify which messages have recently been sent.
+        waitingForLastTick[4] = true;
+      }
+    }
+    
+    // Check for Reset.
+    if (responsesWaiting[5]) {
+      if (waitingForLastTick[5]) {
+        // If all responses recieved...
+        if (resetAck[0] && resetAck[1] && resetAck[2]) {
+          // Reset values back to default.
+          resetAck[0] = false;
+          resetAck[1] = false;
+          resetAck[2] = false;
+          responsesWaiting[5] = false;
+          waitingForLastTick[5] = false;
+          retryAttempts[5] = RETRY_COUNT;
+          
+          // Update system state.
+          systemState = SYSTEM_NOT_STARTED;
+        } else {
+          // Resend message if not all responses are recieved.
+          retryAttempts[5]--;
+          sendMessage(RESET);
+        }
+      } else {
+        // Helps to identify which messages have recently been sent.
+        waitingForLastTick[5] = true;
+      }
+    }
+    
+    // Check for PAD1 pickup.
+    if (responsesWaiting[6]) {
+      if (waitingForLastTick[6]) {
+        // If all responses recieved...
+        if (pad1BlockAck) {
+          // Reset values back to default.
+          pad1BlockAck = false;
+          responsesWaiting[6] = false;
+          waitingForLastTick[6] = false;
+          retryAttempts[6] = RETRY_COUNT;
+          
+          // Update system state.
+          systemState = SYSTEM_NOT_STARTED;
+        } else {
+          // Resend message if not all responses are recieved.
+          retryAttempts[6]--;
+          sendMessage(REQ_PICKUP_PAD1);
+        }
+      } else {
+        // Helps to identify which messages have recently been sent.
+        waitingForLastTick[6] = true;
+      }
+    }
+    
+    // Check if retry attepts have hit 0.
+    for (int i = 0; i < 7; i++) {
+      if (retryAttempts[i] <= 0) {
+        // If retry attepts are expired, signal emergency stop.
+        //sendMessage(EM_STOP);
+      }
+    }
+    
+    OSTimeDly(1000);
+  }
+}
+
+static void appTaskLED(void *pdata) {
+  while (true) {      
+    // LED 1 (Ready & Readying)
+    if (systemState == SYSTEM_NOT_STARTED || systemState == SYSTEM_STOPPED) {
+      interfaceLedSetState(D1_LED, LED_ON);
+    } else if (systemState == SYSTEM_RESETTING) {
+      interfaceLedToggle(D1_LED);
+    } else {
+      interfaceLedSetState(D1_LED, LED_OFF);
+    }
+    
+    // LED 2 (Running & Starting/Stopping)
+    if (systemState == SYSTEM_RUNNING) {
+      interfaceLedSetState(D2_LED, LED_ON);
+    } else if (systemState == SYSTEM_STARTING || systemState == SYSTEM_STOPPING) {
+      interfaceLedToggle(D2_LED);
+    } else {
+      interfaceLedSetState(D2_LED, LED_OFF);
+    }
+    
+    // LED 3 (Paused & Pausing/Resuming)
+    if (systemState == SYSTEM_PAUSED) {
+      interfaceLedSetState(D3_LED, LED_ON);
+    } else if (systemState == SYSTEM_PAUSING || systemState == SYSTEM_RESUMING) {
+      interfaceLedToggle(D3_LED);
+    } else {
+      interfaceLedSetState(D3_LED, LED_OFF);
+    }
+    
+    // LED 4 (Emergency)
+    if (systemState == SYSTEM_EMERGENCY_STOP) {
+      interfaceLedSetState(D4_LED, LED_ON);
+    } else if (systemState == SYSTEM_ERROR_DETECTED) {
+      interfaceLedToggle(D4_LED);
     } else {
       interfaceLedSetState(D4_LED, LED_OFF);
     }
-    OSTimeDly(20);
-  } 
+        
+    OSTimeDly(250);
+  }
 }
 
+static void appTaskLCD(void *pdata) {
+  int ackRow;
+  
+  // LCD display loop.
+  while ( true ) {    
+    // Show system state.
+    lcdSetTextPos(1, 1);
+    lcdWrite(displaySystemState[systemState]);
+    
+    // Show state of sensor 1.
+    lcdSetTextPos(1, 2);
+    lcdWrite("Pad 1");
+    lcdSetTextPos(7, 2);
+    if (controlItemPresent(CONTROL_SENSOR_1)) {
+      lcdWrite("Y");
+    } else {
+      lcdWrite("N");
+    }
+    
+    // Show state of sensor 2.
+    lcdSetTextPos(1, 3);
+    lcdWrite("Pad 2");
+    lcdSetTextPos(7, 3);
+    if (controlItemPresent(CONTROL_SENSOR_2)) {
+      lcdWrite("Y");
+    } else {
+      lcdWrite("N");
+    }
+    
+    // Show if ignoring pad input
+    lcdSetTextPos(10, 2);
+    lcdWrite("Ignor");
+    lcdSetTextPos(17, 2);
+    if (ignorePadInput) {
+      lcdWrite("Y");
+    } else {
+      lcdWrite("N");
+    }
+    
+    // Show pressed state of alarm button.
+    lcdSetTextPos(10, 3);
+    lcdWrite("AlBtn");
+    lcdSetTextPos(17, 3);
+    if (controlEmergencyStopButtonPressed()) {
+      lcdWrite("Y");
+    } else {
+      lcdWrite("N");
+    }
+    
+    // Show last message recieved.
+    lcdSetTextPos(1, 5);
+    if (messageDisplay != -1) {
+      lcdWrite(displayMessageContents[messageDisplay]);
+    }
+    
+    // Show status of responses.
+    ackRow = 7;
+    lcdSetTextPos(1, ackRow);
+    lcdWrite("Responses  C  R1 R2");
+    for (int y = 0; y < 7; y++) {
+      if (responsesWaiting[y]) {
+        ackRow++;
+        
+        // Display discription text.
+        lcdSetTextPos(1, ackRow);
+        lcdWrite(pendingAckMessageTitle[y]);
+        
+        // Display response info.
+        for (int x = 0; x < 3; x++) {
+          lcdSetTextPos(12 + (x*3), ackRow);
+          
+          // EM Stop
+          if (y == 0) {
+            if (emStopAck[x]) {
+              lcdWrite("Y");
+            } else {
+              lcdWrite("N");
+            }
+          } 
+          // Pause
+          else if (y == 1) {
+            if (pauseAck[x]) {
+              lcdWrite("Y");
+            } else {
+              lcdWrite("N");
+            }
+          }
+          // Resume
+          else if (y == 2) {
+            if (resumeAck[x]) {
+              lcdWrite("Y");
+            } else {
+              lcdWrite("N");
+            }
+          } 
+          // Start
+          else if (y == 3) {
+            if (startAck[x]) {
+              lcdWrite("Y");
+            } else {
+              lcdWrite("N");
+            }
+          }
+          // Stop
+          else if (y == 4) {
+            if (stopAck[x]) {
+              lcdWrite("Y");
+            } else {
+              lcdWrite("N");
+            }
+          }
+          // Reset
+          else if (y == 5) {
+            if (resetAck[x]) {
+              lcdWrite("Y");
+            } else {
+              lcdWrite("N");
+            }
+          }
+          // Pad1 Pickup Request
+          else if (y == 6) {
+            if (x == 1) {
+              if (pad1BlockAck) {
+                lcdWrite("Y");
+              } else {
+                lcdWrite("N");
+              }
+            } else {
+                lcdWrite("-");
+            }
+          }
+        }
+      }
+    }
+    // Fills the remaining rows with white space (only relevent messages are shown)
+    while (ackRow < 12) {
+      ackRow++;
+      lcdSetTextPos(1, ackRow);
+      lcdWrite("                     ");
+    }
+    
+    OSTimeDly(100);
+  }
+}
+
+static void appTaskCanSend(void *pdata) {
+  canMessage_t msg = {0, 0, 0, 0};
+  uint8_t error;
+    
+  /* Start the OS ticker
+   * (must be done in the highest priority task)
+   */
+  osStartTick();
+
+  /* Initialise the CAN message structure */
+  msg.id = 0x07;  // arbitrary CAN message id
+  msg.len = 4;    // data length 4
+  msg.dataA = 0;
+  msg.dataB = 0;
+  
+  /*
+   * Now execute the main task loop for this task
+   */
+  while ( true ) {
+    OSSemPend(canSendSem, 0, &error);
+    msg.id = messageSend;
+    
+    // Transmit message on CAN 1
+    canWrite(CAN_PORT_1, &msg);
+    
+    OSTimeDly(500);
+  }
+}
+
+/*
+ * A simple interrupt handler for CAN message reception on CAN1
+ */
+static void canHandler(void) {
+  if (canReady(CAN_PORT_1)) {
+    canRead(CAN_PORT_1, &can1RxBuf);
+    OSSemPost(can1RxSem);
+  }
+}
+
+static void sendMessage(int message) {  
+  // Update system state if needed.
+  if (message == EM_STOP && !responsesWaiting[0]) {
+    systemState = SYSTEM_ERROR_DETECTED;
+    for (int i = 0; i < sizeof(responsesWaiting); i++) {
+      responsesWaiting[i] = false;
+    }
+    controlAlarmSetState(CONTROL_ALARM_ON);
+    for (int i = 0; i < 3; i++) {
+      emStopAck[i] = false;
+      pauseAck[i] = false;
+      resumeAck[i] = false;
+      startAck[i] = false;
+      stopAck[i] = false;
+      resetAck[i] = false;
+    }
+    responsesWaiting[0] = true;
+  } else if (message == PAUSE && !responsesWaiting[1]) {
+    systemState = SYSTEM_PAUSING;
+    responsesWaiting[1] = true;
+  } else if (message == RESUME && !responsesWaiting[2]) {
+    systemState = SYSTEM_RESUMING;
+    responsesWaiting[2] = true;
+  } else if (message == START && !responsesWaiting[3]) {
+    systemState = SYSTEM_STARTING;
+    responsesWaiting[3] = true;
+  } else if (message == CTRL_STOP && !responsesWaiting[4]) {
+    systemState = SYSTEM_STOPPING;
+    responsesWaiting[4] = true;
+  } else if (message == RESET && !responsesWaiting[5]) {
+    // Reset
+    systemState = SYSTEM_RESETTING;
+    for (int i = 0; i < sizeof(responsesWaiting); i++) {
+      responsesWaiting[i] = false;
+    }
+    for (int i = 0; i < 3; i++) {
+      emStopAck[i] = false;
+      pauseAck[i] = false;
+      resumeAck[i] = false;
+      startAck[i] = false;
+      stopAck[i] = false;
+      resetAck[i] = false;
+    }
+    pad1BlockAck = false;
+    responsesWaiting[5] = true;
+    controlAlarmSetState(CONTROL_ALARM_OFF);
+  } else if (message == REQ_PICKUP_PAD1 && !responsesWaiting[6]) {
+    responsesWaiting[6] = true;
+    pad1BlockAck = false;
+    ignorePadInput = true;
+  }
+  
+  // Update mesage to diaplay.
+  messageDisplay = message;
+  
+  // Post the semephore so the sending task can take over.
+  messageSend = message;
+  OSSemPost(canSendSem);
+}
+
+static void processRecievedMessage(int message){
+  messageDisplay = message;
+  
+  // Reacts appropriatly to each message.
+  if (message == EM_STOP_ACK_CONV) {
+    // Conveyor responding to emergency stop.
+    emStopAck[0] = true;
+  } else if (message == EM_STOP_ACK_ROB1) {
+    // Robot1 responding to emergency stop.
+    emStopAck[1] = true;
+  } else if (message == EM_STOP_ACK_ROB2) {
+    // Robot2 responding to emergency stop.
+    emStopAck[2] = true;
+  } else if (message == ERR_CONV) {
+    // Conveyor is reporting an error. Emergency stop.
+    sendMessage(EM_STOP);
+  } else if (message == ERR_ROB1) {
+    // Robot 1 is reporting an error. Emergency stop.
+    sendMessage(EM_STOP);
+  } else if (message == ERR_ROB2) {
+    // Robot 2 is reporting an error. Emergency stop.
+    sendMessage(EM_STOP);
+  } else if (message == PAUSE_ACK_CONV) {
+    // Conveyor responding to pause instruction.
+    pauseAck[0] = true;
+  } else if (message == PAUSE_ACK_ROB1) {
+    // Robot1 responding to pause instruction.
+    pauseAck[1] = true;
+  } else if (message == PAUSE_ACK_ROB2) {
+    // Robot2 responding to pause instruction.
+    pauseAck[2] = true;
+  }  else if (message == RESUME_ACK_CONV) {
+    // Conveyor responding to resume instruction.
+    resumeAck[0] = true;
+  } else if (message == RESUME_ACK_ROB1) {
+    // Robot1 responding to resume instruction.
+    resumeAck[1] = true;
+  } else if (message == RESUME_ACK_ROB2) {
+    // Robot2 responding to resume instruction.
+    resumeAck[2] = true;
+  } else if (message == START_ACK_CONV) {
+    // Conveyor responding to start instruction.
+    startAck[0] = true;
+  } else if (message == START_ACK_ROB1) {
+    // Robot1 responding to start instruction.
+    startAck[1] = true;
+  } else if (message == START_ACK_ROB2) {
+    // Robot2 responding to start instruction.
+    startAck[2] = true;  
+  } else if (message == CTRL_STOP_ACK_CONV) {
+    // Conveyor responding to stop instruction.
+    stopAck[0] = true;
+  } else if (message == CTRL_STOP_ACK_ROB1) {
+    // Robot1 responding to stop instruction.
+    stopAck[1] = true;
+  } else if (message == CTRL_STOP_ACK_ROB2) {
+    // Robot2 responding to stop instruction.
+    stopAck[2] = true;
+  } else if (message == RESET_ACK_CONV) {
+    // Conveyor responding to reset instruction.
+    resetAck[0] = true;
+  } else if (message == RESET_ACK_ROB1) {
+    // Robot1 responding to reset instruction.
+    resetAck[1] = true;
+  } else if (message == RESET_ACK_ROB2) {
+    // Robot2 responding to reset instruction.
+    resetAck[2] = true;
+  } else if (message == ACK_PICKUP_PAD1) {
+    // Robot1 responding to pad1 picup request.
+    pad1BlockAck = true;
+  } else if (message == CHK_PAD1_PICKUP) {
+    // Robot1 is enquiring about the status of pad 1.
+    if (!controlItemPresent(CONTROL_SENSOR_1)) {
+      // The pickup was a success
+      sendMessage(ACK_CHK_PAD1_PICKUP);
+      ignorePadInput = false;
+    } else {
+      // The block is still there 
+      sendMessage(NACK_CHK_PAD1_PICKUP);
+    }
+  } else if (message == REQ_DROP_PAD2) {
+    // Robot2 is enquiring about the status of pad 2.
+    if (controlItemPresent(CONTROL_SENSOR_2)) {
+      // A block is present.
+      sendMessage(ACK_DROP_PAD2);
+    } else {
+      // No block detected.
+      sendMessage(NACK_DROP_PAD2);
+    } 
+  } else if (message == CHK_PAD2_DROP) {
+      // Robot2 is enquiring if the drp on pad2 was a success.
+      if (!controlItemPresent(CONTROL_SENSOR_2)) {
+        // A block is present.
+        sendMessage(ACK_CHK_PAD2_DROP);
+      } else {
+        // No block detected.
+        sendMessage(NACK_CHK_PAD2_DROP);
+      }
+  }
+}
