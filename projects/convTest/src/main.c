@@ -107,6 +107,7 @@ static struct ConvVars successfulDop(struct ConvVars convVars);
 //counter
 static struct Counter countUp(struct Counter counter);
 //btns
+static struct ConvVars readBtns(struct ConvVars convVars);
 
 
 /*************************************************************************
@@ -309,20 +310,8 @@ static void appTaskCtrlConv(void *pdata) {
       //breaks without
           
       //new buttons
-      if(btnBool.jsLTPressed==2){
-        convVars.stopConv=77;
-      }else if(btnBool.jsRTPressed==2){
-        convVars.stopConv=77;
-      }else if(btnBool.jsUpPressed==2){
-        convVars.stopConv=77;
-      }else if(btnBool.jsDownPressed==2){
-        convVars.stopConv=77;
-      }else if(btnBool.jsCentPressed==2){
-        convVars.stopConv=77;
-      }else if(btnBool.but1Pressed==2){//left
-        convVars.blockCount=0;       
-      }else if(btnBool.but2Pressed==2){//right
-      }    
+    convVars=readBtns(convVars);
+
       //coveyer recieves drop request
       
       if(conveyorItemPresent(CONVEYOR_SENSOR_2)){
@@ -455,7 +444,23 @@ static struct Counter countUp(struct Counter counter){
   counter.y2=counter.y1;
   return counter;
 }
-
+static struct ConvVars readBtns(struct ConvVars convVars){
+      if(btnBool.jsLTPressed==2){
+        convVars.stopConv=77;
+      }else if(btnBool.jsRTPressed==2){
+        convVars.stopConv=77;
+      }else if(btnBool.jsUpPressed==2){
+        convVars.stopConv=77;
+      }else if(btnBool.jsDownPressed==2){
+        convVars.stopConv=77;
+      }else if(btnBool.jsCentPressed==2){
+        convVars.stopConv=77;
+      }else if(btnBool.but1Pressed==2){//left
+        convVars.blockCount=0;       
+      }else if(btnBool.but2Pressed==2){//right
+      } 
+return convVars;
+}
 
 /**
 static struct ConvVars emConveyerTimeout(struct ConvVars convVars){
