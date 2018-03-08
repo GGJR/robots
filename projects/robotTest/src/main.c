@@ -233,7 +233,7 @@ static void appTaskButtons(void *pdata) {
    
     //Unsuccessful Pickup
     if(msg.id == NACK_CHK_PAD1_PICKUP && STATE == CHK_PAD1_PICKUP)
-    {
+    { 
 		if(retries == 3)
 		{
 			STATE = ERR_ROB1;//In the event of the retries exceeding 3 the Robot enters an error state
