@@ -56,6 +56,10 @@ static void appTaskCanMonitor(void *pdata);
 */
 static void canHandler(void);
 void robotMoveJointTo(robotJoint_t, uint32_t);
+void pickUpPad1(void);
+void moveAboveConveyor(void);
+void dropBlockConveyor(void);
+void setRobotStart(void);
 
 /*
 *************************************************************************
@@ -66,7 +70,10 @@ void robotMoveJointTo(robotJoint_t, uint32_t);
 static OS_EVENT *can1RxSem;
 static OS_EVENT *LCDsem;
 static canMessage_t can1RxBuf;
+static uint32_t STATE;
 INT8U error;
+static int retries = 0;
+
 
 /*****************************************************************************
 *                        GLOBAL FUNCTION DEFINITIONS
@@ -74,7 +81,7 @@ INT8U error;
 
 
 int main() {
-  uint8_t error;
+
   
   /* Initialise the hardware */
   bspInit();
@@ -122,9 +129,6 @@ static void appTaskButtons(void *pdata) {
   static uint32_t leds[5] = {D1_LED, D1_LED, D2_LED, D3_LED, D4_LED};
   static bool jsRightPressed = false;
   static bool jsLeftPressed = false;
-  
-
-
   
   /* the main task loop for this task  */
   while (true) {
@@ -195,120 +199,86 @@ static void appTaskButtons(void *pdata) {
   canRxInterrupt(canHandler);
   osStartTick();
   
-   //Local variables
-    uint32_t counter=0;
-    uint32_t RUNNING = 0;
-    uint32_t PAD_WAITING = 0;
-    uint32_t BLOCK_IN_TRANSIT = 0;
-   // bool WAITING_ON_MESSAGE = false;
     
 
   /* 
    * Now execute the main task loop for this task
    */     
   while ( true ) {
-    OSSemPend(can1RxSem, 0, &error);
-    msg = can1RxBuf;
+    OSSemPend(can1RxSem, 0, &error);//Pending on access to the CAN semaphore
+	
+    msg = can1RxBuf;//The can message to be checked is taken from the CAN buffer
     
-    if(msg.id == START && !RUNNING)
-    {
-      RUNNING = 11;//true
-      robotMoveJointTo(ROBOT_ELBOW, 87500);
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_WAIST, 67250);  
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_WRIST, 82250);
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_HAND, 68750);
-      
-      msg.id = START_ACK_ROB1;
-      canWrite(CAN_PORT_1, &msg);
+    //Start Message Response Code//
+    if(msg.id == START && STATE < START)
+    { 
+      msg.id = START_ACK_ROB1;//Assigns the message START_ACK_ROB1 to the can message ID
+      canWrite(CAN_PORT_1, &msg);//Acknowledge Start command
+	  STATE = START;//Set robot to start state
     }
     
-    if(msg.id == REQ_PICKUP_PAD1)
+    if(msg.id == REQ_PICKUP_PAD1 && STATE < REQ_PICKUP_PAD1)
     {
-      PAD_WAITING = 22;//true
+      msg.id = ACK_PICKUP_PAD1;//Assigns the message ACK_PICKUP_PAD1 to the can message ID
+      canWrite(CAN_PORT_1, &msg);//Acknowledge the pickup request
       
-      msg.id = ACK_PICKUP_PAD1;
-      canWrite(CAN_PORT_1, &msg);
-    }
-    
-    if(PAD_WAITING && !BLOCK_IN_TRANSIT)
-    {
+      pickUpPad1();//Pick up block
       
-      counter++;
-
-      PAD_WAITING = 0;//false
-      robotMoveJointTo(ROBOT_ELBOW, 83500);
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_WAIST, 85000); //left 
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_HAND, 45000);
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_WRIST, 90000);
-      OSTimeDly(500); 
-      robotMoveJointTo(ROBOT_ELBOW, 99500);
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_HAND, 68750);
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_ELBOW, 83500);
+      msg.id = CHK_PAD1_PICKUP;//Assigns the message CHK_PAD1_PICKUP to the can message ID
+      canWrite(CAN_PORT_1, &msg);//Send controller the check for block pickup
+      
+      STATE = CHK_PAD1_PICKUP;//Set robot to the state of checking the success of Pad 1 pickup
      
-      OSTimeDly(2000);
-      
-      msg.id = CHK_PAD1_PICKUP;
-      canWrite(CAN_PORT_1, &msg); 
-      //WAITING_ON_MESSAGE = true;
-      
-    }
-    
-    if(msg.id == NACK_CHK_PAD1_PICKUP) 
-    {
-      PAD_WAITING = 23;//true
-      BLOCK_IN_TRANSIT = 0; //false
     }
    
-    //successful pickup 
-    if(msg.id == ACK_CHK_PAD1_PICKUP) 
+    //Unsuccessful Pickup
+    if(msg.id == NACK_CHK_PAD1_PICKUP && STATE == CHK_PAD1_PICKUP)
     {
-      //WAITING_ON_MESSAGE = false;
-      BLOCK_IN_TRANSIT = 44;  
-      
-      robotMoveJointTo(ROBOT_ELBOW, 100000);
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_HAND, 71000);
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_ELBOW, 83500);
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_WAIST, 45000);
-      OSTimeDly(500);
-      
-      msg.id = REQ_DROP_CONV;
-      canWrite(CAN_PORT_1, &msg);
+		if(retries == 3)
+		{
+			STATE = ERR_ROB1;//In the event of the retries exceeding 3 the Robot enters an error state
+			msg.id = ERR_ROB1;//Assigns the message ERR_ROB1 to the can message ID
+			canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
+		}
+		else{
+		  pickUpPad1();//Helper function to pick up the block from Pad 1
+		  
+		  msg.id = CHK_PAD1_PICKUP;//Assigns the message CHK_PAD1_PICKUP to the can message ID
+		  canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
+		  retries++;//Increments the number of retries
+		  STATE = CHK_PAD1_PICKUP;//Robot is in the state of 'check the block has been picked up successfully'
+		  
+		  OSTimeDly(1000);//System time delay in milliseconds
+		}
+    }
+   
+    //Successful Pickup 
+    if(msg.id == ACK_CHK_PAD1_PICKUP && STATE == CHK_PAD1_PICKUP) 
+    { 
+      moveAboveConveyor();//Helper function to move the robot in position to drop the block on conveyor
+	  
+      msg.id = REQ_DROP_CONV;//Assigns the message REQ_DROP_CONV to the can message ID
+      canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
+	  STATE = REQ_DROP_CONV;//Robot has requested a drop on conveyor, and is awaiting a reply
     }
     
-    if(msg.id == ACK_DROP_CONV && BLOCK_IN_TRANSIT) 
+	//Acknowledgment of conveyor, ready for drop off
+    if(msg.id == ACK_DROP_CONV && STATE == REQ_DROP_CONV) 
     {
-      robotMoveJointTo(ROBOT_ELBOW, 100000);
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_HAND, 45000);
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_ELBOW, 83500);
-      BLOCK_IN_TRANSIT = 0;
-      
-      msg.id = CHK_CONV_DROP;
-      canWrite(CAN_PORT_1, &msg);
+      dropBlockConveyor();//Helper function to drop the block onto the conveyor
+ 
+      msg.id = CHK_CONV_DROP;//Assigns the message CHK_CONV_DROP to the can message ID
+      canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
+	  STATE = CHK_CONV_DROP;//Robot believes the block is dropped and polls the conveyor
     }
     
-    if(msg.id == ACK_CHK_CONV_DROP && BLOCK_IN_TRANSIT)
+	//Acknowledgment of conveyor that block drop-off was successful
+    if(msg.id == ACK_CHK_CONV_DROP && STATE == CHK_CONV_DROP)
     {
-      robotMoveJointTo(ROBOT_ELBOW, 87500);
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_WAIST, 67250);  
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_WRIST, 82250);
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_HAND, 68750);
+      setRobotStart();//Helper function sets joints to neutral
+	  STATE = START;//Resets the robot to it's starting state
     }
+	//End Message Response Code//
 
     
     interfaceLedToggle(D1_LED);
@@ -324,15 +294,8 @@ static void appTaskButtons(void *pdata) {
     lcdSetTextPos(2,5);
     lcdWrite("DATA_B : %08x", msg.dataB);
     
-    
-    lcdSetTextPos(2,7);  
-    lcdWrite("RUNNIN : %08d", RUNNING); 
-    lcdSetTextPos(2,8);
-    lcdWrite("PAD_WG : %08d", PAD_WAITING); 
-    lcdSetTextPos(2,9);
-    lcdWrite("BLkTran: %08d", BLOCK_IN_TRANSIT); 
-    lcdSetTextPos(2,9);
-    lcdWrite("counter: %08d", counter);
+     
+
     error = OSSemPost(LCDsem);
   }
 }
@@ -379,6 +342,52 @@ void robotMoveJointTo(robotJoint_t joint, uint32_t newPos) {
     OSTimeDly(10);
     
   }
+}
+  
+void pickUpPad1(void){
+  
+        robotMoveJointTo(ROBOT_ELBOW, 83500);
+        OSTimeDly(500);
+        robotMoveJointTo(ROBOT_WAIST, 85000);
+        OSTimeDly(500);
+        robotMoveJointTo(ROBOT_HAND, 45000);
+        OSTimeDly(500);
+        robotMoveJointTo(ROBOT_WRIST, 90000);
+        OSTimeDly(500); 
+        robotMoveJointTo(ROBOT_ELBOW, 99500);
+        OSTimeDly(500);
+        robotMoveJointTo(ROBOT_HAND, 68750);
+        OSTimeDly(500);
+        robotMoveJointTo(ROBOT_ELBOW, 83500);
+        OSTimeDly(500);
+}
 
-};
+void moveAboveConveyor(void){
+        
+        robotMoveJointTo(ROBOT_HAND, 71000);
+        robotMoveJointTo(ROBOT_ELBOW, 83500);
+        robotMoveJointTo(ROBOT_WAIST, 45000);
+       
+}
+
+void dropBlockConveyor(void){
+      robotMoveJointTo(ROBOT_ELBOW, 100000);
+      OSTimeDly(500);
+      robotMoveJointTo(ROBOT_HAND, 45000);
+      OSTimeDly(500);
+      robotMoveJointTo(ROBOT_ELBOW, 83500);
+      
+}
+
+void setRobotStart(void){
+      robotMoveJointTo(ROBOT_ELBOW, 87500);
+      OSTimeDly(500);
+      robotMoveJointTo(ROBOT_WAIST, 67250);  
+      OSTimeDly(500);
+      robotMoveJointTo(ROBOT_WRIST, 82250);
+      OSTimeDly(500);
+      robotMoveJointTo(ROBOT_HAND, 68750);
+}
+
+;
 
