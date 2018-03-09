@@ -210,77 +210,129 @@ static void appTaskButtons(void *pdata) {
     msg = can1RxBuf;//The can message to be checked is taken from the CAN buffer
     
     //Start Message Response Code//
-    if(msg.id == START && STATE < START)
-    { 
-      msg.id = START_ACK_ROB1;//Assigns the message START_ACK_ROB1 to the can message ID
-      canWrite(CAN_PORT_1, &msg);//Acknowledge Start command
-	  STATE = START;//Set robot to start state
-    }
-    
-    if(msg.id == REQ_PICKUP_PAD1 && STATE < REQ_PICKUP_PAD1)
-    {
-      msg.id = ACK_PICKUP_PAD1;//Assigns the message ACK_PICKUP_PAD1 to the can message ID
-      canWrite(CAN_PORT_1, &msg);//Acknowledge the pickup request
-      
-      pickUpPad1();//Pick up block
-      
-      msg.id = CHK_PAD1_PICKUP;//Assigns the message CHK_PAD1_PICKUP to the can message ID
-      canWrite(CAN_PORT_1, &msg);//Send controller the check for block pickup
-      
-      STATE = CHK_PAD1_PICKUP;//Set robot to the state of checking the success of Pad 1 pickup
-     
-    }
-   
-    //Unsuccessful Pickup
-    if(msg.id == NACK_CHK_PAD1_PICKUP && STATE == CHK_PAD1_PICKUP)
-    { 
-		if(retries == 3)
+	
+	//Make sure the Robot is not in an error state
+	if(STATE != EM_STOP){
+		//Check Robot is not paused
+		if(STATE != PAUSE){
+			//Start command received from the controller
+			if(msg.id == START && STATE < START)
+			{ 
+			  msg.id = START_ACK_ROB1;//Assigns the message START_ACK_ROB1 to the can message ID
+			  canWrite(CAN_PORT_1, &msg);//Acknowledge Start command
+			  
+			  setRobotStart()//Helper function to move robot joints into neutral position
+			  
+			  STATE = START;//Set robot to start state
+			}
+			
+			//Pause command received from the controller
+			if(msg.id == PAUSE)
+			{
+				msg.id = PAUSE_ACK_ROB1;//Assigns the message PAUSE_ACK_ROB1 to the can message ID
+				canWrite(CAN_PORT_1, &msg);//Acknowledge Start command
+				
+				STATE = PAUSE;
+			}	
+			
+			//If control pause command is received
+			if(msg.id == CTRL_STOP)
+			{
+				 msg.id = CTRL_STOP_ACK_ROB1;//Assigns the message CTRL_STOP_ACK_ROB1 to the can message ID
+				 canWrite(CAN_PORT_1, &msg);//Acknowledge Start command
+			}
+			
+			//Block detected on Pad 1, controller sends request for pick-up
+			if(msg.id == REQ_PICKUP_PAD1 && STATE < REQ_PICKUP_PAD1)
+			{
+			  msg.id = ACK_PICKUP_PAD1;//Assigns the message ACK_PICKUP_PAD1 to the can message ID
+			  canWrite(CAN_PORT_1, &msg);//Acknowledge the pickup request
+			  
+			  pickUpPad1();//Pick up block
+			  
+			  msg.id = CHK_PAD1_PICKUP;//Assigns the message CHK_PAD1_PICKUP to the can message ID
+			  canWrite(CAN_PORT_1, &msg);//Send controller the check for block pickup
+			  
+			  STATE = CHK_PAD1_PICKUP;//Set robot to the state of checking the success of Pad 1 pickup
+			 
+			}
+		   
+			//Unsuccessful Pickup
+			if(msg.id == NACK_CHK_PAD1_PICKUP && STATE == CHK_PAD1_PICKUP)
+			{ 
+				if(retries == 3)
+				{
+					STATE = EM_STOP;//In the event of the retries exceeding 3 the Robot enters an error state
+					msg.id = ERR_ROB1;//Assigns the message ERR_ROB1 to the can message ID
+					canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
+				}
+				else{
+				  pickUpPad1();//Helper function to pick up the block from Pad 1
+				  
+				  msg.id = CHK_PAD1_PICKUP;//Assigns the message CHK_PAD1_PICKUP to the can message ID
+				  canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
+				  
+				  retries++;//Increments the number of retries
+				  
+				  STATE = CHK_PAD1_PICKUP;//Robot is in the state of 'check the block has been picked up successfully'
+				  
+				  OSTimeDly(500);//System time delay in milliseconds
+				}
+			}
+		   
+			//Successful Pickup 
+			if(msg.id == ACK_CHK_PAD1_PICKUP && STATE == CHK_PAD1_PICKUP) 
+			{ 
+			  moveAboveConveyor();//Helper function to move the robot in position to drop the block on conveyor
+			  
+			  msg.id = REQ_DROP_CONV;//Assigns the message REQ_DROP_CONV to the can message ID
+			  canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
+			  STATE = REQ_DROP_CONV;//Robot has requested a drop on conveyor, and is awaiting a reply
+			}
+			
+			//Acknowledgment of conveyor, ready for drop off
+			if(msg.id == ACK_DROP_CONV && STATE == REQ_DROP_CONV) 
+			{
+			  dropBlockConveyor();//Helper function to drop the block onto the conveyor
+		 
+			  msg.id = CHK_CONV_DROP;//Assigns the message CHK_CONV_DROP to the can message ID
+			  canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
+			  STATE = CHK_CONV_DROP;//Robot believes the block is dropped and polls the conveyor
+			}
+			
+			//Acknowledgment of conveyor that block drop-off was successful
+			if(msg.id == ACK_CHK_CONV_DROP && STATE == CHK_CONV_DROP)
+			{
+			  setRobotStart();//Helper function sets joints to neutral
+			  STATE = START;//Resets the robot to it's starting state
+			}
+		}//End of non-paused state code
+		
+		//If controller sends a resume message
+		if(msg.id == RESUME && STATE == PAUSE)
 		{
-			STATE = ERR_ROB1;//In the event of the retries exceeding 3 the Robot enters an error state
-			msg.id = ERR_ROB1;//Assigns the message ERR_ROB1 to the can message ID
-			canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
-		}
-		else{
-		  pickUpPad1();//Helper function to pick up the block from Pad 1
-		  
-		  msg.id = CHK_PAD1_PICKUP;//Assigns the message CHK_PAD1_PICKUP to the can message ID
-		  canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
-		  retries++;//Increments the number of retries
-		  STATE = CHK_PAD1_PICKUP;//Robot is in the state of 'check the block has been picked up successfully'
-		  
-		  OSTimeDly(1000);//System time delay in milliseconds
-		}
-    }
-   
-    //Successful Pickup 
-    if(msg.id == ACK_CHK_PAD1_PICKUP && STATE == CHK_PAD1_PICKUP) 
-    { 
-      moveAboveConveyor();//Helper function to move the robot in position to drop the block on conveyor
-	  
-      msg.id = REQ_DROP_CONV;//Assigns the message REQ_DROP_CONV to the can message ID
-      canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
-	  STATE = REQ_DROP_CONV;//Robot has requested a drop on conveyor, and is awaiting a reply
-    }
-    
-	//Acknowledgment of conveyor, ready for drop off
-    if(msg.id == ACK_DROP_CONV && STATE == REQ_DROP_CONV) 
-    {
-      dropBlockConveyor();//Helper function to drop the block onto the conveyor
- 
-      msg.id = CHK_CONV_DROP;//Assigns the message CHK_CONV_DROP to the can message ID
-      canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
-	  STATE = CHK_CONV_DROP;//Robot believes the block is dropped and polls the conveyor
-    }
-    
-	//Acknowledgment of conveyor that block drop-off was successful
-    if(msg.id == ACK_CHK_CONV_DROP && STATE == CHK_CONV_DROP)
-    {
-      setRobotStart();//Helper function sets joints to neutral
-	  STATE = START;//Resets the robot to it's starting state
-    }
+			STATE = RESUME;
+			
+			msg.id = RESUME_ACK_ROB1;//Assigns the message RESUME_ACK_ROB1 to the can message ID
+			canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can
+		}//End of paused state code
+		
+	}//End of non emergency stop state code
+	
+	//If the controller sends the reset signal, go back to starting position.
+	if(msg.id == RESET)
+	{
+		STATE = RESET_ACK_ROB1;//Set state to reset state
+		
+		msg.id = RESET_ACK_ROB1;//Assigns the message RESET_ACK_ROB1 to the can message ID
+		canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
+		
+		setRobotStart();//Reset robot joint locations to starting locations
+	}//End of emergency stop state code
+	
 	//End Message Response Code//
 
-    
+    //Debug code displayed on LCD
     interfaceLedToggle(D1_LED);
     OSSemPend(LCDsem, 0, &error);
     lcdSetTextPos(2,1);
