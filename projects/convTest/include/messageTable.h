@@ -105,17 +105,33 @@ char displayMessageContents[50][21] = {
 // System State IDs
 enum {
   SYSTEM_NOT_STARTED = 0,
-  SYSTEM_STARTING,
-  SYSTEM_RUNNING,
-  SYSTEM_PAUSING,
+  //SYSTEM_STARTING,
+  SYSTEM_RUNNING_CONV_OFF,
+  SYSTEM_RUNNING_CONV_ON,
+  //SYSTEM_PAUSING,
   SYSTEM_PAUSED,
-  SYSTEM_RESUMING,
-  SYSTEM_STOPPING,
+  //SYSTEM_RESUMING,
+  //SYSTEM_STOPPING,
   SYSTEM_STOPPED,
-  SYSTEM_RESETTING,
-  SYSTEM_ERROR_DETECTED,
-  SYSTEM_EMERGENCY_STOP,
+  //SYSTEM_RESETTING,
+  //SYSTEM_ERROR_DETECTED,
+  SYSTEM_EMERGENCY_STOP_CONT,
+  SYSTEM_EMERGENCY_STOP_CONV,
 };
+
+char displaySystemState[11][28] = {
+  "SYSTEM_NOT_STARTED         ",
+  "SYSTEM_RUNNING_CONV_OFF    ",
+  "SYSTEM_RUNNING_CONV_ON     ",
+  "SYSTEM_PAUSED              ",
+  "SYSTEM_STOPPED             ",
+  "SYSTEM_EMERGENCY_STOP_CONT ",
+  "SYSTEM_EMERGENCY_STOP_CONV ",
+};
+            
+
+
+/**
 char displaySystemState[11][21] = {
   "System Not Started   ",
   "System Starting      ",
@@ -128,3 +144,4 @@ char displaySystemState[11][21] = {
   "System Resetting     ",
   "System Error         ",
   "Emergency Stop       "};
+**/

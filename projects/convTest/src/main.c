@@ -10,7 +10,7 @@
 * item sensed at 2 and moving forward -> stop
 
 Gruff James
-Date-08/03/18
+Date-12/03/18
 
 
 */
@@ -54,7 +54,8 @@ struct ConvVars{
   uint8_t emStop;//in an emergency stop
   uint8_t blockCount;//the number of blocks on the conveyer
   uint32_t rob2ACK;//
-};//7 members
+  uint8_t SYSSTATE;
+};//8 members
 struct Counter{
   uint32_t y1;
   uint32_t y2;
@@ -146,7 +147,7 @@ int main() {
                (OS_STK *)&appTaskBtnsStk[APP_TASK_BTNS_STK_SIZE - 1],
                APP_TASK_BTNS_PRIO);  
   /* Start the OS */
-  //can1RxSem = OSSemCreate(0);//Event-Driven
+  can1RxSem = OSSemCreate(0);//Event-Driven
   LCDsem = OSSemCreate(1);
   
   initWatch();
@@ -198,7 +199,7 @@ static void appTaskCanRead(void *pdata) {
     ///**
     
     //**/
-    OSTimeDly(20);
+    OSTimeDly(50);
   }
 }
 //timing vars
@@ -266,8 +267,9 @@ static void appTaskCtrlConv(void *pdata) {
       msg=msgGlobal;
       displayInfo( msg,lastSentMsg, counter,  convVars);
       OSTimeDly(200);
+      
     }
-    
+    msgGlobal.id=0;
     convVars.start=41;//move back
     
     if(convVars.emStop){
@@ -323,8 +325,11 @@ static void appTaskCtrlConv(void *pdata) {
       if(msg.id==REQ_DROP_CONV){
         convVars.stopConv=76;
         //sends ACK saying it is ok to drop
-        //if(
-        lastSentMsg=sendMes(convVars.blockCount, ACK_DROP_CONV);
+        if(!convVars.convS1){
+            lastSentMsg=sendMes(convVars.blockCount, ACK_DROP_CONV);
+        }else{
+            lastSentMsg=sendMes(convVars.blockCount, NACK_DROP_CONV);
+        }
       } 
       if(convVars.stopConv){
         conveyorSetState(CONVEYOR_OFF);
@@ -336,6 +341,7 @@ static void appTaskCtrlConv(void *pdata) {
         //sends ACK to robot informing successful drop
         lastSentMsg=sendMes(convVars.blockCount, ACK_CHK_CONV_DROP);
         convVars=successfulDop(convVars);
+          msgGlobal.id=0;
         //normal running with conveyer on
       }else if(!convVars.convS2 && !convVars.stopConv && convVars.blockCount && !conveyorItemPresent(CONVEYOR_SENSOR_1)){
         if(conveyorGetState() !=CONVEYOR_REVERSE){
@@ -397,8 +403,10 @@ static void displayInfo(canMessage_t mes,uint32_t lastSentMsg,struct Counter cou
   lcdWrite("blkTOut    : %6d           ",counter.blockTimeOut2); 
   lcdSetTextPos(1, 8); 
   lcdWrite("Rob2 ACK   : %6u           ",convVars.rob2ACK);  
-  lcdSetTextPos(1, 8); 
+  lcdSetTextPos(1, 9); 
   lcdWrite("lastSent   : %6u           ",lastSentMsg);  
+  lcdSetTextPos(1, 10); 
+  lcdWrite("SYSTEM STATE   : %6u           ",lastSentMsg);  
   //  **/
   error = OSSemPost(LCDsem);
   
@@ -455,9 +463,9 @@ static struct ConvVars readBtns(struct ConvVars convVars){
         convVars.stopConv=77;
       }else if(btnBool.jsCentPressed==2){
         convVars.stopConv=77;
-      }else if(btnBool.but1Pressed==2){//left
-        convVars.blockCount=0;       
-      }else if(btnBool.but2Pressed==2){//right
+      }else if(btnBool.but1Pressed==2){//left btn
+        convVars.blockCount=0;        
+      }else if(btnBool.but2Pressed==2){//right btn
       } 
 return convVars;
 }
