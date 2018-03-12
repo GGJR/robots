@@ -73,6 +73,7 @@ static canMessage_t can1RxBuf;
 static uint32_t STATE;
 INT8U error;
 static int retries = 0;
+static bool PAD1_WAITING;
 
 
 /*****************************************************************************
@@ -221,7 +222,7 @@ static void appTaskButtons(void *pdata) {
 			  msg.id = START_ACK_ROB1;//Assigns the message START_ACK_ROB1 to the can message ID
 			  canWrite(CAN_PORT_1, &msg);//Acknowledge Start command
 			  
-			  setRobotStart()//Helper function to move robot joints into neutral position
+			  setRobotStart();//Helper function to move robot joints into neutral position
 			  
 			  STATE = START;//Set robot to start state
 			}
@@ -243,7 +244,7 @@ static void appTaskButtons(void *pdata) {
 			}
 			
 			//Block detected on Pad 1, controller sends request for pick-up
-			if(msg.id == REQ_PICKUP_PAD1 && STATE < REQ_PICKUP_PAD1)
+			if((msg.id == REQ_PICKUP_PAD1 || PAD1_WAITING == true) && STATE < REQ_PICKUP_PAD1)
 			{
 			  msg.id = ACK_PICKUP_PAD1;//Assigns the message ACK_PICKUP_PAD1 to the can message ID
 			  canWrite(CAN_PORT_1, &msg);//Acknowledge the pickup request
@@ -256,6 +257,16 @@ static void appTaskButtons(void *pdata) {
 			  STATE = CHK_PAD1_PICKUP;//Set robot to the state of checking the success of Pad 1 pickup
 			 
 			}
+                        
+                        //Block detected on Pad 1, controller sends request for pick-up, a block is currently in transit
+                        if(msg.id == REQ_PICKUP_PAD1 && STATE > REQ_PICKUP_PAD1)
+                        {
+                          msg.id = ACK_PICKUP_PAD1;//Assigns the message ACK_PICKUP_PAD1 to the can message ID
+			  canWrite(CAN_PORT_1, &msg);//Acknowledge the pickup request
+                          
+                          PAD1_WAITING = true;
+                        }
+                          
 		   
 			//Unsuccessful Pickup
 			if(msg.id == NACK_CHK_PAD1_PICKUP && STATE == CHK_PAD1_PICKUP)
@@ -288,6 +299,11 @@ static void appTaskButtons(void *pdata) {
 			  msg.id = REQ_DROP_CONV;//Assigns the message REQ_DROP_CONV to the can message ID
 			  canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
 			  STATE = REQ_DROP_CONV;//Robot has requested a drop on conveyor, and is awaiting a reply
+                          
+                          if(PAD1_WAITING == true)
+                          {
+                            PAD1_WAITING = false;
+                          }
 			}
 			
 			//Acknowledgment of conveyor, ready for drop off
@@ -305,6 +321,10 @@ static void appTaskButtons(void *pdata) {
 			{
 			  setRobotStart();//Helper function sets joints to neutral
 			  STATE = START;//Resets the robot to it's starting state
+                          if(PAD1_WAITING == true)
+                          {
+                            STATE = START;
+                          }
 			}
 		}//End of non-paused state code
 		
@@ -345,6 +365,11 @@ static void appTaskButtons(void *pdata) {
     lcdWrite("DATA_A : %08x", msg.dataA); 
     lcdSetTextPos(2,5);
     lcdWrite("DATA_B : %08x", msg.dataB);
+    lcdSetTextPos(2,6);
+    lcdWrite("PAD1_WAITING : %d", PAD1_WAITING);
+    lcdSetTextPos(2,7);
+    lcdWrite(displayMessageContents[STATE]);
+    
     
      
 
@@ -390,8 +415,11 @@ void robotMoveJointTo(robotJoint_t joint, uint32_t newPos) {
   }
   
   while(robotJointGetState(joint) != targetPos) {
-    robotJointSetState(joint, direction);
-    OSTimeDly(10);
+    if(STATE != EM_STOP)
+    {
+      robotJointSetState(joint, direction);
+      OSTimeDly(10);
+    }
     
   }
 }
