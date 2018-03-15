@@ -1192,6 +1192,9 @@
     <group>
       <name>include</name>
       <file>
+        <name>$PROJ_DIR$\..\ctrlTest\include\messageTable.h</name>
+      </file>
+      <file>
         <name>$PROJ_DIR$\include\os_cfg.h</name>
       </file>
     </group>
