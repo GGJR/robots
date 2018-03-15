@@ -1,9 +1,7 @@
-/* Control Panel Test
- * Emergency stop -> toggle Alarm State
- *   Data LED 3 lit while emergency stop button pressed
+/* Control Panel (built upon Control Panel Test)
+ * Robert Small w13007276 (2018)
  *
- * Pedestal sensor 1 reported  on interface LED 1 and LINK LED
- * Pedestal sensor 2 reported  on interface LED 2 and CONNECT LED
+ * Built for assignment EN0617 Professionalism & Industrial Case Project - Computer Science - Northumbria University
  */
 
 #include <stdbool.h>
@@ -59,8 +57,8 @@ static OS_STK appTaskLCDStk[APP_TASK_LCD_STK_SIZE];
 *                  APPLICATION FUNCTION PROTOTYPES
 *************************************************************************/
 
-static void appTaskCanSend(void *pdata);
 static void appTaskCanReceive(void *pdata);
+static void appTaskCanSend(void *pdata);
 static void appTaskMonitorSens(void *pdata);
 static void appTaskCtrl(void *pdata);
 static void appTaskCanRetry(void *pdata);
@@ -90,9 +88,7 @@ char pendingAckMessageTitle[7][21] = {
   "Start  :             ",
   "Stop   :             ",
   "Reset  :             ",
-  "Pad1Chk:             ",
-};
-
+  "Pad1Chk:             ",};
 static OS_EVENT *can1RxSem;
 static OS_EVENT *canSendSem;
 static canMessage_t can1RxBuf;
@@ -114,6 +110,7 @@ static bool ignorePadInput = false;
 *                    GLOBAL FUNCTION DEFINITIONS
 *************************************************************************/
 
+
 int main() {
   /* Initialise the hardware */
   bspInit();
@@ -123,15 +120,15 @@ int main() {
   OSInit();
 
   /* Create Tasks */
-  OSTaskCreate(appTaskCanSend,
-               (void *)0,
-               (OS_STK *)&appTaskCanSendStk[APP_TASK_CAN_SEND_STK_SIZE - 1],
-               APP_TASK_CAN_SEND_PRIO);
-  
   OSTaskCreate(appTaskCanReceive,
                (void *)0,
                (OS_STK *)&appTaskCanReceiveStk[APP_TASK_CAN_RECEIVE_STK_SIZE - 1],
                APP_TASK_CAN_RECEIVE_PRIO);
+  
+  OSTaskCreate(appTaskCanSend,
+               (void *)0,
+               (OS_STK *)&appTaskCanSendStk[APP_TASK_CAN_SEND_STK_SIZE - 1],
+               APP_TASK_CAN_SEND_PRIO);
   
   OSTaskCreate(appTaskMonitorSens,
                (void *)0,
@@ -173,38 +170,109 @@ int main() {
 *                   APPLICATION TASK DEFINITIONS
 *************************************************************************/
 
+/*
+ * Event driven task that receives messages on CAN1.
+ * This task calls the function processRecievedMessage(int message) to correctly process a message.
+ */
+static void appTaskCanReceive(void *pdata) {  
+  // Install the CAN interrupt handler and start the OS ticker (must be done in the highest priority task)
+  canRxInterrupt(canHandler);
+  osStartTick();
+  
+  // Initialise local task variables.
+  uint8_t error;
+  canMessage_t msg;
+  
+  // Main loop for this task.
+  while ( true ) {
+    OSSemPend(can1RxSem, 0, &error);
+    msg = can1RxBuf;
+    
+    // Updates the message to display on LCD (for info)
+    messageDisplay = msg.id;
+    
+    // Process message.
+    processRecievedMessage(msg.id);
+  }
+}
+
+/*
+ * Event driven task that sends messages on CAN1.
+ * The function sendMessage(int message) should be called to begin the sending process.
+ */
+static void appTaskCanSend(void *pdata) {
+  // Initialise local task variables.
+  canMessage_t msg = {0, 0, 0, 0};
+  uint8_t error;
+
+  // Initialise the CAN message structure
+  msg.id = 0x07;
+  msg.len = 4;
+  msg.dataA = 0;
+  msg.dataB = 0;
+  
+  // Main loop for this task.
+  // Event driven task to send messages on CAN1.
+  while ( true ) {
+    // Wait for semaphore.
+    OSSemPend(canSendSem, 0, &error);
+    
+    // Set message ID to new value.
+    msg.id = messageSend;
+    
+    // Transmit message on CAN 1
+    canWrite(CAN_PORT_1, &msg);
+  }
+}
+
+/*
+ * Task that moniters the two sensory inputs.
+ */
 static void appTaskMonitorSens(void *pdata) {
-  /* 
-   * Now execute the main task loop for this task
-   */
+  // Main loop for this task.
   while (true) {
+    // Set the state of both on board LEDs to off.
     ledSetState(USB_LINK_LED, LED_OFF);
     ledSetState(USB_CONNECT_LED, LED_OFF);
     
+    // Check if Sensor 1 is currently detecting a block.
     if (controlItemPresent(CONTROL_SENSOR_1)) {
+      // Turn LED on.
+      ledSetState(USB_LINK_LED, LED_ON);
+      
+      // If a message to Robot1 hasn't already been sent.
       if (!ignorePadInput) {
-        // Send message to robot1. (informing that there is block
+        // Send message to robot1. (informing that there is block)
         sendMessage(REQ_PICKUP_PAD1);
       }
-      ledSetState(USB_LINK_LED, LED_ON);
     }
+    // Check if sensor 2 is currently detecting a block.
     if (controlItemPresent(CONTROL_SENSOR_2)) {
-        ledSetState(USB_CONNECT_LED, LED_ON);
+      // Turn LED on.
+      ledSetState(USB_CONNECT_LED, LED_ON);
     }
     
+    // Loop delay.
     OSTimeDly(20);
   }
 }
 
+/*
+ * Task that handles the control of the system.
+ * Button input is handled here.
+ */
 static void appTaskCtrl(void *pdata) {
+  // Initialise local task variables.
   static bool emergency = false;
-  interfaceLedSetState(D3_LED | D4_LED, LED_OFF);
+  //interfaceLedSetState(D3_LED | D4_LED, LED_OFF);
   uint32_t btnState;
   bool Btn1 = false;
   bool Btn2 = false;
   bool JoyUp = false;
   
+  // Main loop for this task.
   while (true) {
+    // Read the button state.
     btnState = buttonsRead();
        
     // Handles button1. (start/stop)
@@ -255,40 +323,22 @@ static void appTaskCtrl(void *pdata) {
       }
     }
     
+    // Loop delay.
     OSTimeDly(50);
   }
 }
 
-static void appTaskCanReceive(void *pdata) {
-  uint8_t error;
-  canMessage_t msg;
-  
-  /* Install the CAN interrupt handler and start the OS ticker
-   * (must be done in the highest priority task)
-   */
-  canRxInterrupt(canHandler);
-  osStartTick();
-
-  /*
-   * Now execute the main task loop for this task
-   */
-  while ( true ) {
-    OSSemPend(can1RxSem, 0, &error);
-    msg = can1RxBuf;
-    
-    // Updates the message to display on LCD (for info)
-    messageDisplay = msg.id;
-    
-    // Process message.
-    processRecievedMessage(msg.id);
-  }
-}
-
+/*
+ * Task that retries sending messages until the expected response is recieved.
+ * If the number of retries excedes the RETRY_COUNT constant, then an error is detected and the system signals emergency stop.
+ */
 static void appTaskCanRetry(void *pdata) {
+  // Initialise local task variables.
   const int RETRY_COUNT = 50;
   bool waitingForLastTick[7] = {false, false, false, false, false, false, false};
   int retryAttempts[7] = {RETRY_COUNT, RETRY_COUNT, RETRY_COUNT, RETRY_COUNT, RETRY_COUNT, RETRY_COUNT, RETRY_COUNT};
   
+  // Main loop for this task.
   // Handles resending messages if responses are not recieved.
   while (true) {
     // Check for emergency stop.
@@ -479,11 +529,18 @@ static void appTaskCanRetry(void *pdata) {
       }
     }
     
+    // Loop delay.
     OSTimeDly(1000);
   }
 }
 
+/*
+ * Task to manage the state of the LEDs.
+ * The LEDs D1, D2, D3 & D4 are used to represent the system state.
+ */
 static void appTaskLED(void *pdata) {
+  // Main loop for this task.
+  // Handles updating of the periferal LEDs to show system state.
   while (true) {      
     // LED 1 (Ready & Readying)
     if (systemState == SYSTEM_NOT_STARTED || systemState == SYSTEM_STOPPED) {
@@ -520,15 +577,22 @@ static void appTaskLED(void *pdata) {
     } else {
       interfaceLedSetState(D4_LED, LED_OFF);
     }
-        
+    
+    // Loop delay.
     OSTimeDly(250);
   }
 }
 
+/*
+ * Task to handle all LCD output.
+ * No semaphores used, this task is the only task interacting with the LCD screen.
+ */
 static void appTaskLCD(void *pdata) {
+  // Initialise local task variables.
   int ackRow;
   
-  // LCD display loop.
+  // Main loop for this task.
+  // LCD display loop. Updates LCD screen to show the current system state.
   while ( true ) {    
     // Show system state.
     lcdSetTextPos(1, 1);
@@ -666,38 +730,15 @@ static void appTaskLCD(void *pdata) {
       lcdWrite("                     ");
     }
     
+    //Loop delay.
     OSTimeDly(100);
   }
 }
 
-static void appTaskCanSend(void *pdata) {
-  canMessage_t msg = {0, 0, 0, 0};
-  uint8_t error;
-    
-  /* Start the OS ticker
-   * (must be done in the highest priority task)
-   */
-  osStartTick();
 
-  /* Initialise the CAN message structure */
-  msg.id = 0x07;  // arbitrary CAN message id
-  msg.len = 4;    // data length 4
-  msg.dataA = 0;
-  msg.dataB = 0;
-  
-  /*
-   * Now execute the main task loop for this task
-   */
-  while ( true ) {
-    OSSemPend(canSendSem, 0, &error);
-    msg.id = messageSend;
-    
-    // Transmit message on CAN 1
-    canWrite(CAN_PORT_1, &msg);
-    
-    OSTimeDly(500);
-  }
-}
+/*************************************************************************
+*                   APPLICATION FUNCTION DEFINITIONS
+*************************************************************************/
 
 /*
  * A simple interrupt handler for CAN message reception on CAN1
@@ -709,9 +750,15 @@ static void canHandler(void) {
   }
 }
 
+/*
+ * A helper function to assist sending messages on CAN.
+ * This task updates the system state according to the new message being sent.
+ * It updates the message to be sent and then releases the send semaphore. (Sending will be picked up by the appTaskCanSend task)
+ */
 static void sendMessage(int message) {  
   // Update system state if needed.
   if (message == EM_STOP && !responsesWaiting[0]) {
+    // Emergency stop
     systemState = SYSTEM_ERROR_DETECTED;
     for (int i = 0; i < sizeof(responsesWaiting); i++) {
       responsesWaiting[i] = false;
@@ -727,15 +774,19 @@ static void sendMessage(int message) {
     }
     responsesWaiting[0] = true;
   } else if (message == PAUSE && !responsesWaiting[1]) {
+    // Pause
     systemState = SYSTEM_PAUSING;
     responsesWaiting[1] = true;
   } else if (message == RESUME && !responsesWaiting[2]) {
+    // Resume
     systemState = SYSTEM_RESUMING;
     responsesWaiting[2] = true;
   } else if (message == START && !responsesWaiting[3]) {
+    // Start
     systemState = SYSTEM_STARTING;
     responsesWaiting[3] = true;
   } else if (message == CTRL_STOP && !responsesWaiting[4]) {
+    // CTRL stop
     systemState = SYSTEM_STOPPING;
     responsesWaiting[4] = true;
   } else if (message == RESET && !responsesWaiting[5]) {
@@ -756,6 +807,7 @@ static void sendMessage(int message) {
     responsesWaiting[5] = true;
     controlAlarmSetState(CONTROL_ALARM_OFF);
   } else if (message == REQ_PICKUP_PAD1 && !responsesWaiting[6]) {
+    // Request pickup from pad 1
     responsesWaiting[6] = true;
     pad1BlockAck = false;
     ignorePadInput = true;
@@ -769,7 +821,11 @@ static void sendMessage(int message) {
   OSSemPost(canSendSem);
 }
 
-static void processRecievedMessage(int message){
+/*
+ * A helper function to decomparmentalise the processing of a message.
+ * The control unit needs to handle many messages so most of this task is reacting to each message case.
+ */
+static void processRecievedMessage(int message) {
   messageDisplay = message;
   
   // Reacts appropriatly to each message.
@@ -853,14 +909,14 @@ static void processRecievedMessage(int message){
     // Robot2 is enquiring about the status of pad 2.
     if (controlItemPresent(CONTROL_SENSOR_2)) {
       // A block is present.
-      sendMessage(ACK_DROP_PAD2);
+      sendMessage(NACK_DROP_PAD2);
     } else {
       // No block detected.
-      sendMessage(NACK_DROP_PAD2);
+      sendMessage(ACK_DROP_PAD2);
     } 
   } else if (message == CHK_PAD2_DROP) {
       // Robot2 is enquiring if the drp on pad2 was a success.
-      if (!controlItemPresent(CONTROL_SENSOR_2)) {
+      if (controlItemPresent(CONTROL_SENSOR_2)) {
         // A block is present.
         sendMessage(ACK_CHK_PAD2_DROP);
       } else {
