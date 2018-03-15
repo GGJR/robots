@@ -10,7 +10,7 @@
 * item sensed at 2 and moving forward -> stop
 
 Gruff James
-Date-12/03/18
+Date-15/03/18
 
 
 */
@@ -54,8 +54,9 @@ struct ConvVars{
   uint8_t emStop;//in an emergency stop
   uint8_t blockCount;//the number of blocks on the conveyer
   uint32_t rob2ACK;//
-  uint8_t SYSSTATE;
-};//8 members
+  uint8_t blockEndWaiting;
+  uint8_t successDrop;
+};//9 members
 struct Counter{
   uint32_t y1;
   uint32_t y2;
@@ -104,7 +105,7 @@ static struct ConvVars emController(struct ConvVars convVars);
 static struct ConvVars resetSystem(struct ConvVars convVars);
 static struct ConvVars startSystem(struct ConvVars convVars);
 //
-static struct ConvVars successfulDop(struct ConvVars convVars);
+static struct ConvVars successfulDrop(struct ConvVars convVars);
 //counter
 static struct Counter countUp(struct Counter counter);
 //btns
@@ -251,7 +252,7 @@ static void appTaskBtns(void *pdata) {
 
 
 static void appTaskCtrlConv(void *pdata) {
-  struct ConvVars convVars={0,0,0,0,0};
+  struct ConvVars convVars={0,0,0,0,0,0,0,0,0};
   struct Counter counter={0,0,0,0,0};
   //static struct ButtonBool btnBool={0,0,0,0,0,0,0};
   canMessage_t msg;
@@ -296,7 +297,7 @@ static void appTaskCtrlConv(void *pdata) {
         break;
       }              
       //for the time out emergency stop
-      if(convVars.blockCount&&!convVars.convS2){
+      if(convVars.blockCount&&!convVars.blockEndWaiting){
         counter=countUp(counter);
         counter.blockTimeOut1+=counter.y3;
         if(counter.blockTimeOut1>timeOut &&!convVars.stopConv ){
@@ -321,6 +322,11 @@ static void appTaskCtrlConv(void *pdata) {
       }else{
         convVars.convS1=0;
       }
+      if(conveyorItemPresent(CONVEYOR_SENSOR_1)){
+        convVars.convS2=5;
+      }else{
+        convVars.convS2=0;
+      }
       
       if(msg.id==REQ_DROP_CONV){
         convVars.stopConv=76;
@@ -331,41 +337,58 @@ static void appTaskCtrlConv(void *pdata) {
             lastSentMsg=sendMes(convVars.blockCount, NACK_DROP_CONV);
         }
       } 
+      if(msg.id==ACK_PICKUP_CONV){
+        convVars.rob2ACK=78;
+      }  
+      if(msg.id==CHK_CONV_PICKUP){
+        if(!convVars.blockEndWaiting){
+            lastSentMsg=sendMes(convVars.blockCount, ACK_CHK_CONV_PICKUP);       
+        }else{
+            lastSentMsg=sendMes(convVars.blockCount, NACK_CHK_CONV_PICKUP);       
+        }
+      }
+      if(msg.id==CHK_CONV_DROP){
+        if(!convVars.successDrop){
+            lastSentMsg=sendMes(convVars.blockCount, ACK_CHK_CONV_DROP);  
+            convVars.successDrop=0;
+        }else{
+            lastSentMsg=sendMes(convVars.blockCount, NACK_CHK_CONV_DROP);       
+        }
+      }
+      
       if(convVars.stopConv){
         conveyorSetState(CONVEYOR_OFF);
       }
+   
       
       
       //This is for when a block is dropped on the conveyer
-      if (convVars.stopConv && conveyorItemPresent(CONVEYOR_SENSOR_2) && !conveyorItemPresent(CONVEYOR_SENSOR_1)){
+      if (convVars.stopConv && convVars.convS1 ){//&& !convVars.convS2
         //sends ACK to robot informing successful drop
-        lastSentMsg=sendMes(convVars.blockCount, ACK_CHK_CONV_DROP);
-        convVars=successfulDop(convVars);
+        //lastSentMsg=sendMes(convVars.blockCount, ACK_CHK_CONV_DROP);
+        
+        convVars=successfulDrop(convVars);
           msgGlobal.id=0;
         //normal running with conveyer on
-      }else if(!convVars.convS2 && !convVars.stopConv && convVars.blockCount && !conveyorItemPresent(CONVEYOR_SENSOR_1)){
+      }else if(!convVars.blockEndWaiting && !convVars.stopConv && convVars.blockCount && !convVars.convS2){
         if(conveyorGetState() !=CONVEYOR_REVERSE){
           conveyorSetState(CONVEYOR_REVERSE);
         }
         //when a block reaches the end
-      }else if(convVars.blockCount && !convVars.convS2 && conveyorItemPresent(CONVEYOR_SENSOR_1)){
+      }else if(convVars.blockCount && !convVars.blockEndWaiting && convVars.convS2){
         conveyorSetState(CONVEYOR_OFF);
-        //notify robot 2 for pickup
-        convVars.convS2=6;
-        if(msg.id==CHK_CONV_PICKUP){
-          convVars.rob2ACK=97;
-        }else{
+        convVars.blockEndWaiting=6;
+        if(!convVars.rob2ACK){
           lastSentMsg=sendMes(convVars.blockCount, REQ_PICKUP_CONV);
         }
         // \/this is when a block is removed\/
-      }else if(convVars.convS2 && !conveyorItemPresent(CONVEYOR_SENSOR_1)){
+      }else if(convVars.blockEndWaiting && !convVars.convS2){
         //successful removal
         //recieve ACK
-        convVars.convS2=0;
+        convVars.blockEndWaiting=0;
         if(convVars.blockCount>0){
           convVars.blockCount--;
         }    
-        lastSentMsg=sendMes(convVars.blockCount, ACK_CHK_CONV_PICKUP);
         OSTimeDly(1000);
       }
       
@@ -400,13 +423,13 @@ static void displayInfo(canMessage_t mes,uint32_t lastSentMsg,struct Counter cou
   lcdSetTextPos(1, 6);
   lcdWrite("blkTOut    : %6d           ",counter.blockTimeOut1); 
   lcdSetTextPos(1, 7);
-  lcdWrite("blkTOut    : %6d           ",counter.blockTimeOut2); 
+  lcdWrite("successDrop: %6d           ",convVars.successDrop); 
   lcdSetTextPos(1, 8); 
   lcdWrite("Rob2 ACK   : %6u           ",convVars.rob2ACK);  
   lcdSetTextPos(1, 9); 
   lcdWrite("lastSent   : %6u           ",lastSentMsg);  
   lcdSetTextPos(1, 10); 
-  lcdWrite("SYSTEM STATE   : %6u           ",lastSentMsg);  
+  lcdWrite("blockEndW  : %6u           ",convVars.blockEndWaiting);  
   //  **/
   error = OSSemPost(LCDsem);
   
@@ -416,7 +439,7 @@ static struct ConvVars emConveyerTimeout(struct ConvVars convVars){
   convVars.start=0;
   convVars.blockCount=0;
   convVars.stopConv=0;
-  convVars.convS2=0;   
+  convVars.blockEndWaiting=0;   
   return convVars;
 }
 static struct ConvVars emController(struct ConvVars convVars){
@@ -424,7 +447,7 @@ static struct ConvVars emController(struct ConvVars convVars){
   convVars.start=0;
   convVars.blockCount=0;
   convVars.stopConv=0;
-  convVars.convS2=0;
+  convVars.blockEndWaiting=0;
   return convVars;
 }
 
@@ -438,12 +461,13 @@ static struct ConvVars startSystem(struct ConvVars convVars){
   convVars.emStop=0;
   return convVars;
 }
-static struct ConvVars successfulDop(struct ConvVars convVars){
+static struct ConvVars successfulDrop(struct ConvVars convVars){
   OSTimeDly(500);//2500
-  conveyorSetState(CONVEYOR_REVERSE);
-  OSTimeDly(10);
+  //conveyorSetState(CONVEYOR_REVERSE);
+  //OSTimeDly(10);
   convVars.blockCount++;
   convVars.stopConv=0;
+  convVars.successDrop=91;
   return convVars;
 }
 static struct Counter countUp(struct Counter counter){
