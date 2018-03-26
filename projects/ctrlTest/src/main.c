@@ -101,7 +101,8 @@ static bool resumeAck[3] = {false, false, false}; // {conveyor, robot1, robot2}
 static bool startAck[3] = {false, false, false}; // {conveyor, robot1, robot2}
 static bool stopAck[3] = {false, false, false}; // {conveyor, robot1, robot2}
 static bool resetAck[3] = {false, false, false}; // {conveyor, robot1, robot2}
-static bool pad1BlockAck = false; // {conveyor}
+static bool pad1BlockAck = false; // {robot1}
+static bool pad2WaitingAck = false; // Stores whether robot2 is waiting for ack.
 static bool responsesWaiting[7] = {false, false, false, false, false, false, false}; // {EmergencyStop, Pause, Resume, Start, Stop, Reset, Pad1Block}
 static bool ignorePadInput = false;
 
@@ -250,6 +251,10 @@ static void appTaskMonitorSens(void *pdata) {
     if (controlItemPresent(CONTROL_SENSOR_2)) {
       // Turn LED on.
       ledSetState(USB_CONNECT_LED, LED_ON);
+    } else if (pad2WaitingAck) {
+      // Robot 2 is holding a block and pad2 has just become free.
+      sendMessage(ACK_DROP_PAD2);
+      pad2WaitingAck = false;
     }
     
     // Loop delay.
@@ -378,7 +383,7 @@ static void appTaskCanRetry(void *pdata) {
           pauseAck[2] = false;
           responsesWaiting[1] = false;
           waitingForLastTick[1] = false;
-          retryAttempts[2] = RETRY_COUNT;
+          retryAttempts[1] = RETRY_COUNT;
           
           // Update system state.
           systemState = SYSTEM_PAUSED;
@@ -507,9 +512,6 @@ static void appTaskCanRetry(void *pdata) {
           responsesWaiting[6] = false;
           waitingForLastTick[6] = false;
           retryAttempts[6] = RETRY_COUNT;
-          
-          // Update system state.
-          systemState = SYSTEM_NOT_STARTED;
         } else {
           // Resend message if not all responses are recieved.
           retryAttempts[6]--;
@@ -910,6 +912,7 @@ static void processRecievedMessage(int message) {
     if (controlItemPresent(CONTROL_SENSOR_2)) {
       // A block is present.
       sendMessage(NACK_DROP_PAD2);
+      pad2WaitingAck = true;
     } else {
       // No block detected.
       sendMessage(ACK_DROP_PAD2);
