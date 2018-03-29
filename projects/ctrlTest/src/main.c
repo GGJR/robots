@@ -242,7 +242,7 @@ static void appTaskMonitorSens(void *pdata) {
       ledSetState(USB_LINK_LED, LED_ON);
       
       // If a message to Robot1 hasn't already been sent.
-      if (!ignorePadInput) {
+      if (!ignorePadInput && systemState == SYSTEM_RUNNING) {
         // Send message to robot1. (informing that there is block)
         sendMessage(REQ_PICKUP_PAD1);
       }
@@ -287,8 +287,8 @@ static void appTaskCtrl(void *pdata) {
     if (Btn1 && (!isButtonPressedInState(btnState, BUT_1))) {
       // Button1 has been pressed and released.
       Btn1 = false;
-      //if (systemState == SYSTEM_NOT_STARTED || systemState == SYSTEM_STOPPED) {
-      if (true) {
+      if (systemState == SYSTEM_NOT_STARTED || systemState == SYSTEM_STOPPED) {
+      //if (true) {
         sendMessage(START);
       } else if (systemState == SYSTEM_RUNNING) {
         sendMessage(CTRL_STOP);
@@ -403,7 +403,7 @@ static void appTaskCanRetry(void *pdata) {
       if (waitingForLastTick[2]) {
         // If all responses recieved...
         if (resumeAck[0] && resumeAck[1] && resumeAck[2]) {
-          // Reset values back to default.
+          // Reset values b to default.
           resumeAck[0] = false;
           resumeAck[1] = false;
           resumeAck[2] = false;
@@ -532,7 +532,7 @@ static void appTaskCanRetry(void *pdata) {
     }
     
     // Loop delay.
-    OSTimeDly(1000);
+    OSTimeDly(500);
   }
 }
 
