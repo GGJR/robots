@@ -10,7 +10,7 @@
 * item sensed at 2 and moving forward -> stop
 
 Gruff James
-Date-26/03/18
+Date-29/03/18 //nearly done
 
 
 */
@@ -52,14 +52,18 @@ struct ConvVars{
   uint8_t convS1;//block on the start sensor
   uint8_t convS2;//block on the end sensor
   uint8_t start;//in nning state
-  uint8_t emStop;//in an emergency stop
+  uint8_t emStop;//in an emergency stop from controller
+  uint8_t emStopConv;
   uint8_t blockCount;//the number of blocks on the conveyer
   uint32_t rob2ACK;//
   uint8_t blockEndWaiting;
   uint8_t successDrop;
+  uint8_t successPick;
   //testing state vars- delete later
-  uint32_t test;
-
+  uint32_t test0;
+  uint32_t test1;
+  uint32_t test2;
+  uint32_t test3;
   
   uint8_t pause;
   uint8_t resume;
@@ -113,7 +117,7 @@ static void displayInfo(canMessage_t mes,uint32_t lastSentMsg,struct Counter emC
 static void displayInfoLight(uint32_t counterb,uint32_t msgGlobal);
 
 //
-static uint32_t sendMes(uint8_t blockCount,uint32_t mesID);
+static uint32_t sendMes(uint32_t mesID);
 //emergency stops
 static struct ConvVars emConveyerTimeout(struct ConvVars convVars);
 static struct ConvVars emController(struct ConvVars convVars);
@@ -158,7 +162,7 @@ int main() {
                (void *)0,
                (OS_STK *)&appTaskCanReadStk[APP_TASK_CAN_READ_STK_SIZE - 1],
                APP_TASK_CAN_READ_PRIO);
-   OSTaskCreate(appTaskCanWrite,                               
+  OSTaskCreate(appTaskCanWrite,                               
                (void *)0,
                (OS_STK *)&appTaskCanWriteStk[APP_TASK_CAN_WRITE_STK_SIZE - 1],
                APP_TASK_CAN_WRITE_PRIO);
@@ -192,8 +196,8 @@ canMessage_t msgSendGlobal;
 static void appTaskCanRead(void *pdata) {
   uint8_t error;
   canRxInterrupt(canHandler);//Event-Driven
-    osStartTick();
-uint32_t counterb=0;
+  osStartTick();
+  uint32_t counterb=0;
   /* Start the OS ticker
   * (must be done in the highest priority task)
   */
@@ -203,28 +207,10 @@ uint32_t counterb=0;
   */
   msgGlobal.id=0;
   while (true) {
-    /**
-    interfaceLedSetState(D1_LED | D2_LED | D3_LED | D4_LED, LED_OFF);
-    //ledSetState(USB_LINK_LED, LED_OFF);
-    //ledSetState(USB_CONNECT_LED, LED_OFF);
-    //ledSetState(USB_LINK_LED, LED_ON);    
-    //ledSetState(USB_CONNECT_LED, LED_ON);    
-    if (conveyorItemPresent(CONVEYOR_SENSOR_1)) {//back convyer
-      interfaceLedSetState(D1_LED, LED_ON);
-      ledToggle(USB_CONNECT_LED);
-    } else{
-      ledSetState(USB_CONNECT_LED, LED_OFF);
-    }
-    if (conveyorItemPresent(CONVEYOR_SENSOR_2)) {//front conveyer
-      interfaceLedSetState(D2_LED, LED_ON);
-      ledToggle(USB_LINK_LED);
-    } else{
-      ledSetState(USB_LINK_LED, LED_OFF);
-    }
-    **/
+    
     ///////////////////////////////////consider wiping can each time
     //can1RxBuf.id=0;
-   // msgGlobal.id=0;
+    // msgGlobal.id=0;
     counterb++;
     OSSemPend(can1RxSem, 0, &error);
     msgGlobal = can1RxBuf;
@@ -237,7 +223,7 @@ uint32_t counterb=0;
 }
 static void displayInfoLight(uint32_t counterb,uint32_t msgGlobalID){
   OSSemPend(LCDsem, 0, &error);
-
+  
   lcdSetTextPos(1, 10);
   lcdWrite("msgID %02u Ctr %02u     ",counterb); 
   error = OSSemPost(LCDsem);
@@ -247,10 +233,32 @@ static void displayInfoLight(uint32_t counterb,uint32_t msgGlobalID){
 //timing vars
 static void appTaskCanWrite(void *pdata) {
   canMessage_t msgOut = {0,0,0,0};
+  interfaceLedSetState(D1_LED | D2_LED | D3_LED | D4_LED, LED_OFF);
   while(true){
-      OSSemPend(canSendSem, 0, &error);
-      msgOut=msgSendGlobal;
-      canWrite(CAN_PORT_1, &msgOut);
+    /**
+    //ledSetState(USB_LINK_LED, LED_OFF);
+    //ledSetState(USB_CONNECT_LED, LED_OFF);
+    //ledSetState(USB_LINK_LED, LED_ON);    
+    //ledSetState(USB_CONNECT_LED, LED_ON);    
+    if (conveyorItemPresent(CONVEYOR_SENSOR_1)) {//back convyer
+    interfaceLedSetState(D1_LED, LED_ON);
+    ledToggle(USB_CONNECT_LED);
+  } else{
+    ledSetState(USB_CONNECT_LED, LED_OFF);
+  }
+    if (conveyorItemPresent(CONVEYOR_SENSOR_2)) {//front conveyer
+    interfaceLedSetState(D2_LED, LED_ON);
+    ledToggle(USB_LINK_LED);
+  } else{
+    ledSetState(USB_LINK_LED, LED_OFF);
+  }
+    **/
+    
+    OSSemPend(canSendSem, 0, &error);
+    msgOut=msgSendGlobal;
+    canWrite(CAN_PORT_1, &msgOut);
+    ledToggle(USB_LINK_LED);
+    ledToggle(USB_CONNECT_LED);
   }
 }
 static void appTaskBtns(void *pdata) {
@@ -304,13 +312,13 @@ static void appTaskCtrlConv(void *pdata) {
   struct Counter emCounter={0,0,0,0,0};
   struct Counter dropCounter={0,0,0,0,0};
   struct Counter pickUpCounter={0,0,0,0,0};
-
+  
   
   //static struct ButtonBool btnBool={0,0,0,0,0,0,0};
   canMessage_t msg;
   uint32_t lastSentMsg=0;
-  uint32_t emTimeOut=100000;//conveyer timeout for emergency stop
-  uint32_t dropDelay=2000;//conveyer timeout for emergency stop
+  uint32_t emTimeOut=25000;//conveyer timeout for emergency stop
+  uint32_t dropDelay=3000;//conveyer timeout for emergency stop
   
   uint32_t btnState;
   while (true) {
@@ -318,9 +326,19 @@ static void appTaskCtrlConv(void *pdata) {
     ///**
     while(msg.id!=START&&(msg.id!=RESET)){
       msg=msgGlobal;
-      convVars.test++;
+      convVars.test0++;
+      ///**
+      if(convVars.emStopConv){
+        if(!msg.id==EM_STOP||!msg.id==EM_STOP_ACK_ROB1||!msg.id==EM_STOP_ACK_ROB1){
+          lastSentMsg=sendMes( ERR_CONV);
+        }
+      }   
+      
+      //**/
+      if(msg.id==CTRL_STOP){
+        lastSentMsg=sendMes( CTRL_STOP_ACK_CONV);
+      }
       displayInfo( msg,lastSentMsg, emCounter,dropCounter,  convVars);
-      //OSTimeDly(200);
       
     }
     msgGlobal.id=0;
@@ -328,10 +346,10 @@ static void appTaskCtrlConv(void *pdata) {
     
     if(convVars.emStop){
       convVars=resetSystem(convVars);
-      lastSentMsg=sendMes(convVars.blockCount, RESET_ACK_CONV);
+      lastSentMsg=sendMes( RESET_ACK_CONV);
     }else{
       convVars=startSystem(convVars);
-      lastSentMsg=sendMes(convVars.blockCount, START_ACK_CONV);
+      lastSentMsg=sendMes( START_ACK_CONV);
     }
     
     // **/  
@@ -343,10 +361,12 @@ static void appTaskCtrlConv(void *pdata) {
       msg.id=0;
       msg=msgGlobal;
       //checks for emergency stop
+      convVars.test1++;
       if(msg.id==EM_STOP){
-        lastSentMsg=sendMes(convVars.blockCount, EM_STOP_ACK_CONV);
-        conveyorSetState(CONVEYOR_OFF);  
+        lastSentMsg=sendMes(EM_STOP_ACK_CONV);
+        conveyorSetState(CONVEYOR_FORWARD);  //CONVEYOR_OFF
         convVars=emController(convVars);
+        OSTimeDly(3000);
         break;
       }              
       //for the time out emergency stop
@@ -354,7 +374,7 @@ static void appTaskCtrlConv(void *pdata) {
         emCounter=countUp(emCounter);
         emCounter.blockTimeOut1+=emCounter.y3;
         if(emCounter.blockTimeOut1>emTimeOut &&!convVars.stopConv ){
-          lastSentMsg=sendMes(convVars.blockCount, ERR_CONV);
+          lastSentMsg=sendMes( ERR_CONV);
           convVars=emConveyerTimeout(convVars);
           conveyorSetState(CONVEYOR_OFF);    
         }
@@ -364,28 +384,35 @@ static void appTaskCtrlConv(void *pdata) {
       }
       emCounter.blockTimeOut2+=emCounter.y3;
       //breaks without
-      
+      if(msg.id==CTRL_STOP){
+        lastSentMsg=sendMes( CTRL_STOP_ACK_CONV);
+        if(!convVars.stopConv&&!convVars.blockCount){
+          convVars.start=0;
+          OSTimeDly(3000);
+          break;
+        }
+      }
       //system pause
       ///**
       if(msg.id==PAUSE){
-        lastSentMsg=sendMes(convVars.blockCount, PAUSE_ACK_CONV);
+        lastSentMsg=sendMes( PAUSE_ACK_CONV);
         convVars.pause=55;
         convVars.resume=0;
         conveyorSetState(CONVEYOR_OFF);  
         while(convVars.pause){
           msg=msgGlobal;
           if(msg.id==RESUME){
-            lastSentMsg=sendMes(convVars.blockCount, RESUME_ACK_CONV);
+            lastSentMsg=sendMes(RESUME_ACK_CONV);
             convVars.resume=66;
             convVars.pause=0;
             break;
           }else if(msg.id==PAUSE){
-            lastSentMsg=sendMes(convVars.blockCount, PAUSE_ACK_CONV);
+            lastSentMsg=sendMes(PAUSE_ACK_CONV);
           }
           displayInfo( msg,lastSentMsg, emCounter,dropCounter,  convVars);
         }
       }else if(msg.id==RESUME){
-        lastSentMsg=sendMes(convVars.blockCount, RESUME_ACK_CONV);
+        lastSentMsg=sendMes( RESUME_ACK_CONV);
         convVars.resume=67;
       }
       //**/
@@ -396,21 +423,19 @@ static void appTaskCtrlConv(void *pdata) {
       
       //read sensors
       convVars=readSensors(convVars);
-
- 
+      
+      
       
       if(msg.id==REQ_DROP_CONV && !convVars.stopConv){
         msg.id=0;
-        msgGlobal.id=0;
-      
-
+        msgGlobal.id=0;       
         //sends ACK saying it is ok to drop
         if(!convVars.convS1){
           convVars.stopConv=76;
-          lastSentMsg=sendMes(convVars.blockCount, ACK_DROP_CONV);
+          lastSentMsg=sendMes( ACK_DROP_CONV);
           convVars.successDrop=0;
         }else{
-          lastSentMsg=sendMes(convVars.blockCount, NACK_DROP_CONV);
+          lastSentMsg=sendMes(NACK_DROP_CONV);
         }
       } 
       if(msg.id==ACK_PICKUP_CONV){
@@ -418,10 +443,12 @@ static void appTaskCtrlConv(void *pdata) {
       }  
       if(msg.id==CHK_CONV_PICKUP){
         if(!convVars.blockEndWaiting){
-          lastSentMsg=sendMes(convVars.blockCount, ACK_CHK_CONV_PICKUP);     
+          lastSentMsg=sendMes( ACK_CHK_CONV_PICKUP);     
           convVars.rob2ACK=0;
+          convVars.test2=83;
         }else{
-          lastSentMsg=sendMes(convVars.blockCount, NACK_CHK_CONV_PICKUP);       
+          lastSentMsg=sendMes( NACK_CHK_CONV_PICKUP);       
+          convVars.test2=69;
         }
       }
       
@@ -456,7 +483,7 @@ static void appTaskCtrlConv(void *pdata) {
         conveyorSetState(CONVEYOR_OFF);
         convVars.blockEndWaiting=6;
         if(!convVars.rob2ACK){
-          lastSentMsg=sendMes(convVars.blockCount, REQ_PICKUP_CONV);
+          lastSentMsg=sendMes(REQ_PICKUP_CONV);
         }
         // \/this is when a block is removed\/
       }else if(convVars.blockEndWaiting && !convVars.convS2){
@@ -471,11 +498,13 @@ static void appTaskCtrlConv(void *pdata) {
       //counter
       
       if(msg.id==CHK_CONV_DROP){
+        msg.id=0;
         if(convVars.successDrop){
-          lastSentMsg=sendMes(convVars.blockCount, ACK_CHK_CONV_DROP);  
-          msg.id=0;
+          lastSentMsg=sendMes(ACK_CHK_CONV_DROP);  
+          convVars.test3++;
+          //msg.id=0;
         }else{
-          lastSentMsg=sendMes(convVars.blockCount, NACK_CHK_CONV_DROP); 
+          lastSentMsg=sendMes( NACK_CHK_CONV_DROP); 
         }
       }
       displayInfo( msg,lastSentMsg,emCounter,dropCounter,  convVars);
@@ -485,18 +514,18 @@ static void appTaskCtrlConv(void *pdata) {
   } 
 }
 static struct ConvVars readSensors(struct ConvVars convVars){
-     if(conveyorItemPresent(CONVEYOR_SENSOR_2)){
-        convVars.convS1=4;
-      }else{
-        convVars.convS1=0;
-      }
-      if(conveyorItemPresent(CONVEYOR_SENSOR_1)){
-        convVars.convS2=5;
-      }else{
-        convVars.convS2=0;
-      }
+  if(conveyorItemPresent(CONVEYOR_SENSOR_2)){
+    convVars.convS1=4;
+  }else{
+    convVars.convS1=0;
+  }
+  if(conveyorItemPresent(CONVEYOR_SENSOR_1)){
+    convVars.convS2=5;
+  }else{
+    convVars.convS2=0;
+  }
   
-return convVars;
+  return convVars;
 }
 
 
@@ -506,7 +535,7 @@ static void displayInfo(canMessage_t mes,uint32_t lastSentMsg,struct Counter emC
   ///**
   static uint32_t canID;
   if(mes.id){
-   canID=mes.id;
+    canID=mes.id;
   }
   //conveyer display
   // uint8_t error;
@@ -517,28 +546,29 @@ static void displayInfo(canMessage_t mes,uint32_t lastSentMsg,struct Counter emC
   lcdSetTextPos(1, 1);
   lcdWrite("blckNo:%2u stoConv:%2u    ",convVars.blockCount,convVars.stopConv);
   lcdSetTextPos(1, 2);
-  lcdWrite("CanIn/Out  :%02u|%02u     ",canID,lastSentMsg);
+  lcdWrite("CanIn/Out:%02u|%02u     ",canID,lastSentMsg);
   lcdSetTextPos(1, 3);
   lcdWrite("start      :%3u           ",convVars.start);
   lcdSetTextPos(1, 4); 
-  lcdWrite("emCont/TOut:%2u|%05d      ",convVars.emStop,emCounter.blockTimeOut1);  
+  lcdWrite("emC/CV/TO:%2u|%2u|%05d   ",convVars.emStop,convVars.emStopConv,emCounter.blockTimeOut1);  
   lcdSetTextPos(1, 5);
-  lcdWrite("successDrop:%3d           ",convVars.successDrop); 
+  lcdWrite("s-Drp/Pck:%02u|%02u      ",convVars.successDrop,convVars.successPick); 
   lcdSetTextPos(1, 6); 
-  lcdWrite("Rob2 ACK   :%3u           ",convVars.rob2ACK);  
+  lcdWrite("Rob2 ACK :%3u           ",convVars.rob2ACK);  
   lcdSetTextPos(1, 7); 
-  lcdWrite("blckEndWait:%3u           ",convVars.blockEndWaiting);  
+  lcdWrite("blkNdWait:%3u           ",convVars.blockEndWaiting);  
   lcdSetTextPos(1, 8); 
-  lcdWrite("dropDelay  :%3u           ",dropCounter.blockTimeOut1); 
+  lcdWrite("dropDelay:%3u           ",dropCounter.blockTimeOut1); 
   lcdSetTextPos(1, 9); 
-  lcdWrite("|| / |>    :%02u|%02u     ",convVars.pause,convVars.resume); 
-  //lcdSetTextPos(1, 10); 
-  //lcdWrite("test       :%3u           ",convVars.test); 
+  lcdWrite("|| / |>  :%02u|%02u     ",convVars.pause,convVars.resume); 
+  lcdSetTextPos(1, 10); 
+  lcdWrite("test :%2u~%2u~%2u~%2u     ",convVars.test0,convVars.test1,convVars.test2,convVars.test3); 
   //  **/
   error = OSSemPost(LCDsem);
   
 }
 static struct ConvVars emConveyerTimeout(struct ConvVars convVars){
+  convVars.emStopConv=81;
   convVars.emStop=82;
   convVars.start=0;
   convVars.blockCount=0;
@@ -566,9 +596,7 @@ static struct ConvVars startSystem(struct ConvVars convVars){
   return convVars;
 }
 static struct ConvVars successfulDrop(struct ConvVars convVars){
-  OSTimeDly(500);//2500
-  //conveyorSetState(CONVEYOR_REVERSE);
-  //OSTimeDly(10);
+  //OSTimeDly(500);//2500
   convVars.blockCount++;
   convVars.stopConv=0;
   convVars.successDrop=91;
@@ -599,23 +627,15 @@ static struct ConvVars readBtns(struct ConvVars convVars){
 }
 
 /**
-static struct ConvVars emConveyerTimeout(struct ConvVars convVars){
+static struct ConvVars copyPasteMe(struct ConvVars convVars){
 
 return convVars;
 }
 **/
-static uint32_t sendMes2(  uint8_t blockCount,uint32_t mesID){
-  canMessage_t msgOut;
-  bool txOk = false;
-  msgOut.id=mesID;
-  msgOut.dataA=blockCount;
-  txOk = canWrite(CAN_PORT_1, &msgOut);
-  return mesID;
-}
-static uint32_t sendMes(  uint8_t blockCount,uint32_t mesID){
+
+static uint32_t sendMes(uint32_t mesID){
   canMessage_t msgOut;
   msgOut.id=mesID;
-  msgOut.dataA=blockCount;
   msgSendGlobal=msgOut;
   OSSemPost(canSendSem);
   return mesID;
