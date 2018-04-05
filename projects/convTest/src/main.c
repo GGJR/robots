@@ -10,7 +10,7 @@
 * item sensed at 2 and moving forward -> stop
 
 Gruff James
-Date-29/03/18 //nearly done
+Date-05/04/18 //nearly done
 
 
 */
@@ -64,6 +64,7 @@ struct ConvVars{
   uint32_t test1;
   uint32_t test2;
   uint32_t test3;
+  uint32_t test4;
   
   uint8_t pause;
   uint8_t resume;
@@ -111,7 +112,7 @@ static void appTaskBtns(void *pdata);
 
 uint32_t readWatch(void);                 //Reads the watch and returns it's value
 static void canHandler(void);
-static void displayInfo(canMessage_t mes,uint32_t lastSentMsg,struct Counter emCounter,struct Counter dropCounter,struct ConvVars convVars);
+static void displayInfo(canMessage_t mes,uint32_t lastSentMsg,struct Counter emCounter,struct Counter dropCounter,struct Counter pickUpCounter,struct ConvVars convVars);
 
 //
 static void displayInfoLight(uint32_t counterb,uint32_t msgGlobal);
@@ -317,13 +318,15 @@ static void appTaskCtrlConv(void *pdata) {
   //static struct ButtonBool btnBool={0,0,0,0,0,0,0};
   canMessage_t msg;
   uint32_t lastSentMsg=0;
-  uint32_t emTimeOut=25000;//conveyer timeout for emergency stop
+  uint32_t emTimeOut=50000;//conveyer timeout for emergency stop
   uint32_t dropDelay=3000;//conveyer timeout for emergency stop
-  
+  uint32_t pickUpDelay=3000;
   uint32_t btnState;
   while (true) {
     //starting loop & in emergency stop
     ///**
+    
+    
     while(msg.id!=START&&(msg.id!=RESET)){
       msg=msgGlobal;
       convVars.test0++;
@@ -338,7 +341,7 @@ static void appTaskCtrlConv(void *pdata) {
       if(msg.id==CTRL_STOP){
         lastSentMsg=sendMes( CTRL_STOP_ACK_CONV);
       }
-      displayInfo( msg,lastSentMsg, emCounter,dropCounter,  convVars);
+      displayInfo( msg,lastSentMsg, emCounter,dropCounter,pickUpCounter,  convVars);
       
     }
     msgGlobal.id=0;
@@ -364,7 +367,7 @@ static void appTaskCtrlConv(void *pdata) {
       convVars.test1++;
       if(msg.id==EM_STOP){
         lastSentMsg=sendMes(EM_STOP_ACK_CONV);
-        conveyorSetState(CONVEYOR_FORWARD);  //CONVEYOR_OFF
+        conveyorSetState(CONVEYOR_OFF);  //CONVEYOR_OFF
         convVars=emController(convVars);
         OSTimeDly(3000);
         break;
@@ -409,7 +412,7 @@ static void appTaskCtrlConv(void *pdata) {
           }else if(msg.id==PAUSE){
             lastSentMsg=sendMes(PAUSE_ACK_CONV);
           }
-          displayInfo( msg,lastSentMsg, emCounter,dropCounter,  convVars);
+          displayInfo( msg,lastSentMsg, emCounter,dropCounter,pickUpCounter,  convVars);
         }
       }else if(msg.id==RESUME){
         lastSentMsg=sendMes( RESUME_ACK_CONV);
@@ -456,9 +459,18 @@ static void appTaskCtrlConv(void *pdata) {
       if(convVars.stopConv){
         conveyorSetState(CONVEYOR_OFF);
       }
+      //pickUp counter
+      if(convVars.blockEndWaiting && !convVars.convS2){     
+        pickUpCounter=countUp(pickUpCounter);
+        pickUpCounter.blockTimeOut1+=pickUpCounter.y3;
+      }else{
+        pickUpCounter.blockTimeOut1=0;
+        pickUpCounter=countUp(pickUpCounter);
+      }
+        pickUpCounter.blockTimeOut2+=pickUpCounter.y3;
+
       
-      
-      
+
       //successful drop counter
       if (convVars.stopConv && convVars.convS1){
         dropCounter=countUp(dropCounter);
@@ -467,7 +479,8 @@ static void appTaskCtrlConv(void *pdata) {
         dropCounter.blockTimeOut1=0;
         dropCounter=countUp(dropCounter);
       }
-      
+        dropCounter.blockTimeOut2+=dropCounter.y3;
+
       //in the event of a succesful drop
       if(convVars.stopConv && convVars.convS1 && (dropCounter.blockTimeOut1>dropDelay)){
         dropCounter.blockTimeOut1=0;
@@ -479,21 +492,24 @@ static void appTaskCtrlConv(void *pdata) {
           conveyorSetState(CONVEYOR_REVERSE);
         }
         //when a block reaches the end
-      }else if(convVars.blockCount && !convVars.blockEndWaiting && convVars.convS2){
+      }else if(convVars.blockCount  && convVars.convS2){//&& !convVars.blockEndWaiting
         conveyorSetState(CONVEYOR_OFF);
         convVars.blockEndWaiting=6;
+        convVars.test4++;
+
         if(!convVars.rob2ACK){
           lastSentMsg=sendMes(REQ_PICKUP_CONV);
         }
         // \/this is when a block is removed\/
-      }else if(convVars.blockEndWaiting && !convVars.convS2){
+      }else if(convVars.blockEndWaiting && !convVars.convS2 && (pickUpCounter.blockTimeOut1>pickUpDelay)){
         //successful removal
         //recieve ACK
+        pickUpCounter.blockTimeOut1=0;
         convVars.blockEndWaiting=0;
         if(convVars.blockCount>0){
           convVars.blockCount--;
         }    
-        OSTimeDly(1000);
+        //OSTimeDly(1500);
       }
       //counter
       
@@ -507,10 +523,10 @@ static void appTaskCtrlConv(void *pdata) {
           lastSentMsg=sendMes( NACK_CHK_CONV_DROP); 
         }
       }
-      displayInfo( msg,lastSentMsg,emCounter,dropCounter,  convVars);
+      displayInfo( msg,lastSentMsg,emCounter,dropCounter,pickUpCounter,  convVars);
       //OSTimeDly(50);
     }
-    displayInfo( msg,lastSentMsg, emCounter,dropCounter,  convVars);
+    displayInfo( msg,lastSentMsg, emCounter,dropCounter,pickUpCounter,  convVars);
   } 
 }
 static struct ConvVars readSensors(struct ConvVars convVars){
@@ -530,7 +546,7 @@ static struct ConvVars readSensors(struct ConvVars convVars){
 
 
 
-static void displayInfo(canMessage_t mes,uint32_t lastSentMsg,struct Counter emCounter,struct Counter dropCounter,struct ConvVars convVars){
+static void displayInfo(canMessage_t mes,uint32_t lastSentMsg,struct Counter emCounter,struct Counter dropCounter,struct Counter pickUpCounter,struct ConvVars convVars){
   
   ///**
   static uint32_t canID;
@@ -549,6 +565,10 @@ static void displayInfo(canMessage_t mes,uint32_t lastSentMsg,struct Counter emC
   lcdWrite("CanIn/Out:%02u|%02u     ",canID,lastSentMsg);
   lcdSetTextPos(1, 3);
   lcdWrite("start      :%3u           ",convVars.start);
+  
+  lcdSetTextPos(1, 3);
+  lcdWrite("EDP:%05u|%05u|%05u        ",emCounter.blockTimeOut2,dropCounter.blockTimeOut2,pickUpCounter.blockTimeOut2);
+  
   lcdSetTextPos(1, 4); 
   lcdWrite("emC/CV/TO:%2u|%2u|%05d   ",convVars.emStop,convVars.emStopConv,emCounter.blockTimeOut1);  
   lcdSetTextPos(1, 5);
@@ -558,11 +578,11 @@ static void displayInfo(canMessage_t mes,uint32_t lastSentMsg,struct Counter emC
   lcdSetTextPos(1, 7); 
   lcdWrite("blkNdWait:%3u           ",convVars.blockEndWaiting);  
   lcdSetTextPos(1, 8); 
-  lcdWrite("dropDelay:%3u           ",dropCounter.blockTimeOut1); 
+  lcdWrite("Delay D/P:%05u|%05u      ",dropCounter.blockTimeOut1,pickUpCounter.blockTimeOut1); 
   lcdSetTextPos(1, 9); 
   lcdWrite("|| / |>  :%02u|%02u     ",convVars.pause,convVars.resume); 
   lcdSetTextPos(1, 10); 
-  lcdWrite("test :%2u~%2u~%2u~%2u     ",convVars.test0,convVars.test1,convVars.test2,convVars.test3); 
+  lcdWrite("test :%2u~%2u~%2u~%2u~%2u~ ",convVars.test0,convVars.test1,convVars.test2,convVars.test3,convVars.test4); 
   //  **/
   error = OSSemPost(LCDsem);
   
