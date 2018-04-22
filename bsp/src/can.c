@@ -27,7 +27,7 @@
 
 
 #ifndef CAN_BITRATE
-#define CAN_BITRATE BITRATE100K60MHZ
+#define CAN_BITRATE BITRATE1000K60MHZ
 #endif
 
 #define ACCF_BYPASS          0x02   // filter off, receive all

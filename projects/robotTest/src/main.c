@@ -105,6 +105,7 @@ static canMessage_t can1RxBuf;
 INT8U error;
 static uint32_t STATE;
 static int retries = 0;
+static int retriesPad2 = 0;
 static bool CONV_WAITING;
 
 /*****************************************************************************
@@ -112,12 +113,12 @@ static bool CONV_WAITING;
 *****************************************************************************/
 
 
-int main() {
+          int main() {
   uint8_t error;
   
   /* Initialise the hardware */
   bspInit();
-  robotInit();
+  robotInit();  
 
   /* Initialise the OS */
   OSInit();                                                   
@@ -126,7 +127,7 @@ int main() {
   OSTaskCreate(appTaskButtons,                
 
                
-               (void *)0,
+               (void *)0, 
                (OS_STK *)&appTaskButtonsStk[APP_TASK_BUTTONS_STK_SIZE - 1],
                APP_TASK_BUTTONS_PRIO);
  
@@ -376,11 +377,20 @@ static void appTaskButtons(void *pdata) {
     {
       drop_success = true;
     }*/
+    if(msg.id == EM_STOP)
+    {
+        STATE = EM_STOP;//Set state to reset state
+        msg.id = EM_STOP_ACK_ROB2;//Assigns the message RESET_ACK_ROB1 to the can message ID
+        canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
+        OSTimeDly(1000);
+    }
     
     //Make sure the Robot is not in an error state
 	if(STATE != EM_STOP){
 		//Check Robot is not paused
 		if(STATE != PAUSE){
+                  
+                        /////////Start, Pause, Resume and Stop Code////////////////////////////////////////
 			//Start command received from the controller
 			if(msg.id == START && STATE < START)
 			{ 
@@ -407,10 +417,13 @@ static void appTaskButtons(void *pdata) {
 			{
 				 msg.id = CTRL_STOP_ACK_ROB2;//Assigns the message CTRL_STOP_ACK_ROB1 to the can message ID
 				 canWrite(CAN_PORT_1, &msg);//Acknowledge Start command
+                                 OSTimeDly(1000);
 			}
-			
-			//Block detected on Conveyor, conveyor sends request for pick-up
-			if((msg.id == REQ_PICKUP_CONV || CONV_WAITING == true) && STATE < REQ_PICKUP_CONV)
+                        
+                        ////CONVEYOR PICKUP CODE///////////////////////////////////////
+                       //Block detected on Conveyor, conveyor sends request for pick-up
+                       
+                        if((msg.id == REQ_PICKUP_CONV || CONV_WAITING == true) && STATE < RESET_ACK_ROB2)
 			{
                             msg.id = ACK_PICKUP_CONV;
                             canWrite(CAN_PORT_1, &msg);
@@ -418,6 +431,8 @@ static void appTaskButtons(void *pdata) {
                             block_in_transit = true;
                           
                             pickUpConv();
+                           
+                            OSTimeDly(1000);
                             
                             msg.id = CHK_CONV_PICKUP;
                             canWrite(CAN_PORT_1, &msg);
@@ -429,41 +444,16 @@ static void appTaskButtons(void *pdata) {
 			 
 			}
                         
-                        //Block detected on Pad 1, controller sends request for pick-up, a block is currently in transit
+                        //Block detected on Conveyor, conveyor sends request for pick-up, a block is currently in transit, ack the message
                         if(msg.id == REQ_PICKUP_CONV && STATE > REQ_PICKUP_CONV)
                         {
                           msg.id = ACK_PICKUP_CONV;//Assigns the message ACK_PICKUP_PAD1 to the can message ID
 			  canWrite(CAN_PORT_1, &msg);//Acknowledge the pickup request
                           
-                          //lcdSetTextPos(2,10);
-                          //lcdWrite("HERE2 : %08d", block_in_transit);
-                          
                           CONV_WAITING = true;
                         }
                           
-			//Unsuccessful Pickup
-			if(msg.id == NACK_CHK_CONV_PICKUP && STATE == CHK_CONV_PICKUP)
-			{ 
-				if(retries == 3)
-				{
-					STATE = EM_STOP;//In the event of the retries exceeding 3 the Robot enters an error state
-					msg.id = ERR_ROB2;//Assigns the message ERR_ROB1 to the can message ID
-					canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
-				}
-				else{
-                                   //Pick up from conveyor
-                                  pickUpConv();
-				  
-				  msg.id = CHK_CONV_PICKUP;//Assigns the message CHK_PAD1_PICKUP to the can message ID
-				  canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
-				  
-				  retries++;//Increments the number of retries
-				  
-				  STATE = CHK_CONV_PICKUP;//Robot is in the state of 'check the block has been picked up successfully'
-				  
-				  OSTimeDly(500);//System time delay in milliseconds
-				}
-			}
+			
 		   
 			//Successful Pickup 
 			if(msg.id == ACK_CHK_CONV_PICKUP && STATE == CHK_CONV_PICKUP) 
@@ -485,17 +475,43 @@ static void appTaskButtons(void *pdata) {
                           {
                             CONV_WAITING = false;
                           }
+                          
+                          retries = 0;
 			}
                         
+                        //Unsuccessful Pickup
+			if(msg.id == NACK_CHK_CONV_PICKUP && STATE == CHK_CONV_PICKUP)
+			{ 
+				if(retries == 3)
+				{
+                                  STATE = EM_STOP;//In the event of the retries exceeding 3 the Robot enters an error state
+                                  msg.id = ERR_ROB2;//Assigns the message ERR_ROB1 to the can message ID
+                                  canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
+				}
+				else{
+                                   //Pick up from conveyor
+                                  pickUpConv();
+                                  
+				  OSTimeDly(250);
+				  
+                                  msg.id = CHK_CONV_PICKUP;//Assigns the message CHK_PAD1_PICKUP to the can message ID
+				  canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
+				  
+				  retries++;//Increments the number of retries
+				  
+				  STATE = CHK_CONV_PICKUP;//Robot is in the state of 'check the block has been picked up successfully'
+				  
+				  OSTimeDly(500);//System time delay in milliseconds
+				}
+			}
+
                         //DONT drop
                         if(msg.id == NACK_DROP_PAD2)
                         {
                           block_in_transit = true;
-                          msg.id = ERR_ROB2;//Assigns the message ERR_ROB1 to the can message ID
-			  canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
                         }
 			
-			//Acknowledgment of conveyor, ready for drop off
+			//Acknowledgment of PAD 2, ready for drop off
 			if(msg.id == ACK_DROP_PAD2 && STATE == REQ_DROP_PAD2) 
 			{
 			  //dropBlockConveyor();//Helper function to drop the block onto the conveyor
@@ -516,6 +532,12 @@ static void appTaskButtons(void *pdata) {
 			  canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
 			  STATE = CHK_PAD2_DROP;//Robot believes the block is dropped and polls the conveyor
 			}
+                         //Resends drop request if nothing has been received
+                        if(STATE == REQ_DROP_PAD2)
+                        {
+                          msg.id = REQ_DROP_PAD2;//Assigns the message REQ_DROP_CONV to the can message ID
+			  canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
+                        }
                         
                         if(msg.id == NACK_CHK_PAD2_DROP)
                         {
@@ -536,8 +558,22 @@ static void appTaskButtons(void *pdata) {
                             STATE = START;
                           }
 			}
+                        
+                        //Resend if conveyor doesn't respond to check pick up
+                        if(STATE == CHK_CONV_PICKUP)
+                        {
+                          msg.id = CHK_CONV_PICKUP;//Assigns the message CHK_CONV_DROP to the can message ID
+			  canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
+                        }
+                        
+                        //Resend if no reply from Pad2
+                        if(STATE == CHK_PAD2_DROP)
+                        {
+                          msg.id = CHK_PAD2_DROP;//Assigns the message CHK_CONV_DROP to the can message ID
+			  canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
+                        }
 		}//End of non-paused state code
-		
+                
 		//If controller sends a resume message
 		if(msg.id == RESUME && STATE == PAUSE)
 		{
@@ -548,7 +584,15 @@ static void appTaskButtons(void *pdata) {
 		}//End of paused state code
 		
 	}//End of non emergency stop state code
-	
+        
+        if(msg.id == EM_STOP)
+        {
+            STATE = EM_STOP;//Set state to reset state
+            msg.id = EM_STOP_ACK_ROB2;//Assigns the message RESET_ACK_ROB1 to the can message ID
+            canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
+            OSTimeDly(1000);
+        }
+
 	//If the controller sends the reset signal, go back to starting position.
 	if(msg.id == RESET)
 	{
@@ -598,9 +642,6 @@ static void appTaskButtons(void *pdata) {
         lcdSetTextPos(2,7);
         lcdWrite(displayMessageContents[STATE]);
     
-    
-     
-
     error = OSSemPost(LCDsem);
   }
 }
@@ -690,7 +731,7 @@ void robotMoveJointTo(robotJoint_t joint, uint32_t newPos) {
   
   uint32_t targetPos = newPos;
   robotJointStep_t direction;
-  
+  // if statement for emergency stop
   if(robotJointGetState(joint) > targetPos) {
    direction = ROBOT_JOINT_POS_DEC;
   }
