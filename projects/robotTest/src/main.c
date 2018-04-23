@@ -104,6 +104,7 @@ static OS_EVENT *LCDsem;
 static canMessage_t can1RxBuf;
 INT8U error;
 static uint32_t STATE;
+static uint32_t LASTSTATE;
 static int retries = 0;
 static int retriesPad2 = 0;
 static bool CONV_WAITING;
@@ -113,7 +114,7 @@ static bool CONV_WAITING;
 *****************************************************************************/
 
 
-          int main() {
+  int main() {
   uint8_t error;
   
   /* Initialise the hardware */
@@ -392,7 +393,7 @@ static void appTaskButtons(void *pdata) {
                   
                         /////////Start, Pause, Resume and Stop Code////////////////////////////////////////
 			//Start command received from the controller
-			if(msg.id == START && STATE < START)
+			if(msg.id == START && STATE <= RESET_ACK_ROB2)
 			{ 
 			  msg.id = START_ACK_ROB2;//Assigns the message START_ACK_ROB1 to the can message ID
 			  canWrite(CAN_PORT_1, &msg);//Acknowledge Start command
@@ -408,7 +409,7 @@ static void appTaskButtons(void *pdata) {
 			{
 				msg.id = PAUSE_ACK_ROB2;//Assigns the message PAUSE_ACK_ROB1 to the can message ID
 				canWrite(CAN_PORT_1, &msg);//Acknowledge Start command
-				
+				LASTSTATE = STATE;
 				STATE = PAUSE;
 			}	
 			
@@ -577,8 +578,8 @@ static void appTaskButtons(void *pdata) {
 		//If controller sends a resume message
 		if(msg.id == RESUME && STATE == PAUSE)
 		{
-			STATE = RESUME;
-			
+			STATE = LASTSTATE;
+			OSTimeDly(20);
 			msg.id = RESUME_ACK_ROB2;//Assigns the message RESUME_ACK_ROB1 to the can message ID
 			canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can
 		}//End of paused state code
@@ -603,6 +604,7 @@ static void appTaskButtons(void *pdata) {
 		
                 //robot start position
                 robotStartPos();
+                //STATE = START;
 	}//End of emergency stop state code
 
        /* interfaceLedToggle(D1_LED);

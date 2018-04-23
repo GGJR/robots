@@ -1,0 +1,27 @@
+commit ff62b4ba4d26ecc4e93a22f6ed8a629cb8269576
+Author: GTsapparellas <giorgos.tsapparellas@gmail.com>
+Date:   Sun Apr 22 13:52:01 2018 +0100
+
+    Rob2_Main_Functionality
+    
+    Main functionality of Robot 2. Individually tested of picking up a block from the conveyor and place it to the output pad (Pad 2).
+
+commit 6e0d41d71ab2fdb17f1dd99d533da88302e311ec
+Author: GTsapparellas <giorgos.tsapparellas@gmail.com>
+Date:   Mon Mar 26 14:33:19 2018 +0100
+
+    Initial_Set_Up
+    
+    Basic functionality of Robot 2 using appropriate messages to communicate with other system's components.
+
+commit 04d6fa4c5718965335804a7a28241d14d2c86f7c
+Author: GruffJames <gruffjameswork@gmail.com>
+Date:   Tue Feb 6 13:11:09 2018 +0000
+
+    changes
+
+commit 7b40b5330a217820e8df29b9ad7fcdc4f6f7b9d9
+Author: = <student@northumbria.ac.uk>
+Date:   Mon Feb 5 18:37:21 2018 +0000
+
+    first commit
