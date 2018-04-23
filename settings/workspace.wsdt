@@ -5,7 +5,7 @@
     
     
     
-  <CurrentConfigs><Project>blinkyFree/Flash</Project><Project>blinkyBare/Flash</Project><Project>blinkyMicrium/Flash</Project><Project>canReceiverInterruptDriven/Flash</Project><Project>blinkyTT/Flash</Project><Project>canReceiverPolling/Flash</Project><Project>ctrlTest/Flash</Project><Project>canSender/Flash</Project><Project>convTest/Flash</Project><Project>robotTest/Flash</Project></CurrentConfigs><CurrentProj>convTest</CurrentProj><OverviewSelected>1</OverviewSelected></ConfigDictionary>
+  <CurrentConfigs><Project>blinkyFree/Flash</Project><Project>blinkyBare/Flash</Project><Project>canReceiverInterruptDriven/Flash</Project><Project>blinkyMicrium/Flash</Project><Project>blinkyTT/Flash</Project><Project>canReceiverPolling/Flash</Project><Project>canSender/Flash</Project><Project>convTest/Flash</Project><Project>robotTest/Flash</Project><Project>ctrlTest/Flash</Project></CurrentConfigs><CurrentProj>convTest</CurrentProj><OverviewSelected>1</OverviewSelected></ConfigDictionary>
   <Desktop>
     <Static>
       <Workspace>
@@ -14,7 +14,7 @@
           
           
           
-        <Column0>59</Column0><Column1>27</Column1><Column2>27</Column2><Column3>27</Column3></ColumnWidths>
+        <Column0>124</Column0><Column1>27</Column1><Column2>27</Column2><Column3>27</Column3></ColumnWidths>
       <PreferedWindows><Position>1</Position><ScreenPosX>0</ScreenPosX><ScreenPosY>0</ScreenPosY><Windows/></PreferedWindows></Workspace>
       <Build>
         
@@ -23,11 +23,11 @@
         
       <ColumnWidth0>20</ColumnWidth0><ColumnWidth1>975</ColumnWidth1><ColumnWidth2>260</ColumnWidth2><ColumnWidth3>65</ColumnWidth3></Build>
       <TerminalIO/>
-    <Find-in-Files><ColumnWidth0>468</ColumnWidth0><ColumnWidth1>66</ColumnWidth1><ColumnWidth2>802</ColumnWidth2></Find-in-Files><Debug-Log><ColumnWidth0>20</ColumnWidth0><ColumnWidth1>1861</ColumnWidth1></Debug-Log></Static>
+    <Find-in-Files><ColumnWidth0>468</ColumnWidth0><ColumnWidth1>66</ColumnWidth1><ColumnWidth2>802</ColumnWidth2></Find-in-Files><Debug-Log><ColumnWidth0>20</ColumnWidth0><ColumnWidth1>1861</ColumnWidth1></Debug-Log><Find-All-Declarations><ColumnWidth0>322</ColumnWidth0><ColumnWidth1>46</ColumnWidth1><ColumnWidth2>553</ColumnWidth2></Find-All-Declarations><Select-Ambiguous-Definitions><ColumnWidth0>322</ColumnWidth0><ColumnWidth1>46</ColumnWidth1><ColumnWidth2>553</ColumnWidth2></Select-Ambiguous-Definitions></Static>
     <Windows>
       
       
-    <Wnd1>
+    <Wnd0>
         <Tabs>
           <Tab>
             <Identity>TabID-17091-12117</Identity>
@@ -35,22 +35,22 @@
             <Factory>Build</Factory>
             <Session/>
           </Tab>
-        <Tab><Identity>TabID-902-6092</Identity><TabName>Find in Files</TabName><Factory>Find-in-Files</Factory><Session/></Tab><Tab><Identity>TabID-25781-31064</Identity><TabName>Debug Log</TabName><Factory>Debug-Log</Factory><Session/></Tab></Tabs>
+        <Tab><Identity>TabID-902-6092</Identity><TabName>Find in Files</TabName><Factory>Find-in-Files</Factory><Session/></Tab><Tab><Identity>TabID-25781-31064</Identity><TabName>Debug Log</TabName><Factory>Debug-Log</Factory><Session/></Tab><Tab><Identity>TabID-6842-23737</Identity><TabName>Declarations</TabName><Factory>Find-All-Declarations</Factory><Session/></Tab><Tab><Identity>TabID-2537-5582</Identity><TabName>Ambiguous Definitions</TabName><Factory>Select-Ambiguous-Definitions</Factory><Session/></Tab></Tabs>
         
-      <SelectedTab>0</SelectedTab></Wnd1></Windows>
+      <SelectedTab>0</SelectedTab></Wnd0></Windows>
     <Editor>
       
       
       
       
-    <Pane><Tab><Factory>TextEditor</Factory><Filename>$WS_DIR$\projects\convTest\src\main.c</Filename><XPos>0</XPos><YPos>0</YPos><SelStart>0</SelStart><SelEnd>0</SelEnd><XPos2>0</XPos2><YPos2>0</YPos2><SelStart2>334</SelStart2><SelEnd2>334</SelEnd2></Tab><ActiveTab>0</ActiveTab><Tab><Factory>TextEditor</Factory><Filename>$WS_DIR$\projects\convTest\include\messageTable.h</Filename><XPos>0</XPos><YPos>0</YPos><SelStart>0</SelStart><SelEnd>0</SelEnd><XPos2>0</XPos2><YPos2>97</YPos2><SelStart2>2613</SelStart2><SelEnd2>2613</SelEnd2></Tab><Tab><Factory>TextEditor</Factory><Filename>$WS_DIR$\bsp\include\can.h</Filename><XPos>0</XPos><YPos>0</YPos><SelStart>0</SelStart><SelEnd>0</SelEnd><XPos2>0</XPos2><YPos2>0</YPos2><SelStart2>384</SelStart2><SelEnd2>384</SelEnd2></Tab><Tab><Factory>TextEditor</Factory><Filename>$WS_DIR$\bsp\src\can.c</Filename><XPos>0</XPos><YPos>0</YPos><SelStart>0</SelStart><SelEnd>0</SelEnd><XPos2>0</XPos2><YPos2>0</YPos2><SelStart2>664</SelStart2><SelEnd2>664</SelEnd2></Tab><Tab><Factory>TextEditor</Factory><Filename>$WS_DIR$\cell\include\conveyor.h</Filename><XPos>0</XPos><YPos>0</YPos><SelStart>0</SelStart><SelEnd>0</SelEnd><XPos2>0</XPos2><YPos2>0</YPos2><SelStart2>213</SelStart2><SelEnd2>229</SelEnd2></Tab></Pane><ActivePane>0</ActivePane><Sizes><Pane><X>1000000</X><Y>1000000</Y></Pane></Sizes><SplitMode>1</SplitMode></Editor>
+    <Pane><Tab><Factory>TextEditor</Factory><Filename>$WS_DIR$\projects\convTest\src\main.c</Filename><XPos>0</XPos><YPos>0</YPos><SelStart>0</SelStart><SelEnd>0</SelEnd><XPos2>0</XPos2><YPos2>294</YPos2><SelStart2>11074</SelStart2><SelEnd2>11074</SelEnd2></Tab><ActiveTab>0</ActiveTab></Pane><ActivePane>0</ActivePane><Sizes><Pane><X>1000000</X><Y>1000000</Y></Pane></Sizes><SplitMode>1</SplitMode></Editor>
     <Positions>
       
       
       
       
       
-    <Top><Row0><Sizes><Toolbar-028160C0><key>iaridepm.enu1</key></Toolbar-028160C0></Sizes></Row0></Top><Left><Row0><Sizes/></Row0></Left><Right><Row0><Sizes/></Row0></Right><Bottom><Row0><Sizes><Wnd1><Rect><Top>-2</Top><Left>-2</Left><Bottom>152</Bottom><Right>754</Right><x>-2</x><y>-2</y><xscreen>756</xscreen><yscreen>154</yscreen><sizeHorzCX>1005319</sizeHorzCX><sizeHorzCY>179907</sizeHorzCY><sizeVertCX>38564</sizeVertCX><sizeVertCY>4673</sizeVertCY></Rect></Wnd1></Sizes></Row0></Bottom><Float><Sizes/></Float></Positions>
+    <Top><Row0><Sizes><Toolbar-005360C0><key>iaridepm.enu1</key></Toolbar-005360C0></Sizes></Row0><Row1><Sizes/></Row1></Top><Left><Row0><Sizes/></Row0></Left><Right><Row0><Sizes/></Row0></Right><Bottom><Row0><Sizes><Wnd0><Rect><Top>-2</Top><Left>-2</Left><Bottom>240</Bottom><Right>946</Right><x>-2</x><y>-2</y><xscreen>948</xscreen><yscreen>242</yscreen><sizeHorzCX>1004237</sizeHorzCX><sizeHorzCY>219601</sizeHorzCY><sizeVertCX>24364</sizeVertCX><sizeVertCY>2722</sizeVertCY></Rect></Wnd0></Sizes></Row0></Bottom><Float><Sizes/></Float></Positions>
   </Desktop>
 </Workspace>
 
