@@ -1,4 +1,32 @@
-// Message IDs
+/***************************************************************************
+* 
+* messageTable.h
+*
+* Header file of OUTPUT ROBOT of the production cell project
+* containing the CAN message IDs, message display contents,
+* system state IDs and system state display contents.
+*
+* File shared with Input Robot, Controller and Conveyor
+* for the successful implementation of the production cell
+* under CAN network.
+*
+* @Date: 26 March 2018
+* @Author: Giorgos Tsapparellas
+* @Group ID: 4
+* @Version: 1.0 (Complete) 
+*                
+*********************************************************************************/
+
+/*********************************************************************************
+*                 CAN Message IDs and Display Message Contents
+*********************************************************************************/
+
+// enum containing CAN message IDs starting from 1.
+// Utilized by the appTaskCanSendReceive function
+// for sending and receiving CAN messages to/from 
+// Controller and Conveyor.
+// CAN message IDs employed also for monitoring
+// appTaskCanSendReceive function current state.
 enum {
   EM_STOP = 1,
   EM_STOP_ACK_CONV,
@@ -49,7 +77,15 @@ enum {
   CHK_PAD2_DROP,
   ACK_CHK_PAD2_DROP,
   NACK_CHK_PAD2_DROP
-};
+}; // end of enum containing CAN message IDs.
+
+// char containing CAN message display contents.
+// Utilized by the appTaskCanSendReceive function
+// for informing user which CAN message is
+// currently on-going through LCD. 
+// Array of size 50 with length 21 for 
+// each message. Position 0 kept null as
+// CAN message IDs starting from 1.
 char displayMessageContents[50][21] = {
   "                     ",
   "Emergency stop sent  ",
@@ -100,9 +136,16 @@ char displayMessageContents[50][21] = {
   "Pad2 full sent       ",
   "Pad2 drop check      ",
   "Pad2 drop success    ",
-  "Pad2 drop fail       ",};
+  "Pad2 drop fail       "
+}; // end of char containing display message contents.
 
-// System State IDs
+/*********************************************************************************
+*               System State IDs and Display System State Contents
+*********************************************************************************/
+
+// enum containing System State IDs starting from 0.
+// Utilized by the appTaskCanSendReceive function
+// for monitoring current system state.
 enum {
   SYSTEM_NOT_STARTED = 0,
   SYSTEM_STARTING,
@@ -115,7 +158,14 @@ enum {
   SYSTEM_RESETTING,
   SYSTEM_ERROR_DETECTED,
   SYSTEM_EMERGENCY_STOP,
-};
+}; // end of enum containing System State IDs.
+
+// char containing System State display contents.
+// Utilized by the appTaskCanSendReceive function
+// for informing user which System State is
+// currently on-going through LCD. 
+// Array of size 11 with length 21 for 
+// each message.
 char displaySystemState[11][21] = {
   "System Not Started   ",
   "System Starting      ",
@@ -127,4 +177,5 @@ char displaySystemState[11][21] = {
   "System Stopped       ",
   "System Resetting     ",
   "System Error         ",
-  "Emergency Stop       "};
+  "Emergency Stop       "
+}; // end of char containing display system state contents.
