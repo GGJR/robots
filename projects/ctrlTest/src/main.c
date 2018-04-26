@@ -93,6 +93,7 @@ static OS_EVENT *can1RxSem;
 static OS_EVENT *canSendSem;
 static canMessage_t can1RxBuf;
 static int messageDisplay = -1;
+static int errorDetected = -1;
 static int messageSend = -1;
 static int systemState = 0;
 static bool emStopAck[3] = {false, false, false}; // {conveyor, robot1, robot2}
@@ -527,7 +528,7 @@ static void appTaskCanRetry(void *pdata) {
     for (int i = 0; i < 7; i++) {
       if (retryAttempts[i] <= 0) {
         // If retry attepts are expired, signal emergency stop.
-        //sendMessage(EM_STOP);
+        sendMessage(EM_STOP);
       }
     }
     
@@ -644,6 +645,23 @@ static void appTaskLCD(void *pdata) {
     lcdSetTextPos(1, 5);
     if (messageDisplay != -1) {
       lcdWrite(displayMessageContents[messageDisplay]);
+    }
+    
+      
+    // Show which component reported an error (if any)
+    lcdSetTextPos(1, 6);
+    if (errorDetected != -1) {
+      if (errorDetected == 0) {
+        lcdWrite("Controller");
+      } else if (errorDetected == 1) {
+        lcdWrite("Robot 1");
+      } else if (errorDetected == 2) {
+        lcdWrite("Conveyor");
+      } else {
+        lcdWrite("Robot 2");
+      }
+    } else {
+        lcdWrite("          ");
     }
     
     // Show status of responses.
@@ -775,6 +793,9 @@ static void sendMessage(int message) {
       resetAck[i] = false;
     }
     responsesWaiting[0] = true;
+    if (errorDetected == -1) {
+      errorDetected = 0;
+    }
   } else if (message == PAUSE && !responsesWaiting[1]) {
     // Pause
     systemState = SYSTEM_PAUSING;
@@ -807,6 +828,7 @@ static void sendMessage(int message) {
     }
     pad1BlockAck = false;
     responsesWaiting[5] = true;
+    errorDetected = -1;
     controlAlarmSetState(CONTROL_ALARM_OFF);
   } else if (message == REQ_PICKUP_PAD1 && !responsesWaiting[6]) {
     // Request pickup from pad 1
@@ -843,12 +865,15 @@ static void processRecievedMessage(int message) {
   } else if (message == ERR_CONV) {
     // Conveyor is reporting an error. Emergency stop.
     sendMessage(EM_STOP);
+    errorDetected = 2;
   } else if (message == ERR_ROB1) {
     // Robot 1 is reporting an error. Emergency stop.
     sendMessage(EM_STOP);
+    errorDetected = 1;
   } else if (message == ERR_ROB2) {
     // Robot 2 is reporting an error. Emergency stop.
     sendMessage(EM_STOP);
+    errorDetected = 3;
   } else if (message == PAUSE_ACK_CONV) {
     // Conveyor responding to pause instruction.
     pauseAck[0] = true;
