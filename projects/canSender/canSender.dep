@@ -32,8 +32,8 @@
       <file>$PROJ_DIR$\..\..\bsp\src\pwm.c</file>
       <file>$PROJ_DIR$\..\..\bsp\src\timers.c</file>
       <file>$PROJ_DIR$\..\..\cell\include\control.h</file>
-      <file>$PROJ_DIR$\..\..\cell\include\interface.h</file>
       <file>$PROJ_DIR$\..\..\cell\include\conveyor.h</file>
+      <file>$PROJ_DIR$\..\..\cell\include\interface.h</file>
       <file>$PROJ_DIR$\..\..\cell\include\robot.h</file>
       <file>$PROJ_DIR$\..\..\cell\src\control.c</file>
       <file>$PROJ_DIR$\..\..\cell\src\conveyor.c</file>

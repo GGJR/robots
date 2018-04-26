@@ -54,7 +54,7 @@ struct ConvVars{
   uint8_t blockEndWaiting;//when a block is waiting on the end sensor
   uint8_t successDrop;//if a block has been successfully dropped on the conveyer
   uint8_t successPick;//if a block has been succesfully picked up from the conveyer
-
+  
   uint8_t pause;//if the system is paused
   uint8_t resume;//if the system has been resumed
   
@@ -64,9 +64,9 @@ struct ConvVars{
   uint32_t lastSentMsg;//the last message sent on the CAN
   
   
-  
+  uint32_t test0;
   uint32_t performance;
-
+  
 };
 //This struct is used to hold information used in to create timers
 struct Counter{
@@ -99,16 +99,11 @@ INT8U error;
 /*************************************************************************
 *                  PRIORITIES
 *************************************************************************/
-
-
-
 enum {
   APP_TASK_CAN_READ_PRIO= 4,
   APP_TASK_CTRL_CONV_PRIO,
   APP_TASK_BTNS_PRIO
 };
-
-
 /*************************************************************************
 *                  APPLICATION TASK STACKS
 *************************************************************************/
@@ -117,14 +112,9 @@ enum {
   APP_TASK_CTRL_CONV_STK_SIZE = 256,
   APP_TASK_BTNS_STK_SIZE = 256
 };
-
-
 static OS_STK appTaskCanReadStk[APP_TASK_CAN_READ_STK_SIZE];
 static OS_STK appTaskCtrlConvStk[APP_TASK_CTRL_CONV_STK_SIZE];
 static OS_STK appTaskBtnsStk[APP_TASK_BTNS_STK_SIZE];
-
-
-
 /*************************************************************************
 *                  APPLICATION FUNCTION PROTOTYPES
 *************************************************************************/
@@ -134,14 +124,14 @@ static void appTaskCanRead(void *pdata);
 static void appTaskCtrlConv(void *pdata);
 static void appTaskBtns(void *pdata);
 
-
-
+//the CAN message interuppt
 
 static void canHandler(void);
 //This function is used to display information to the LCD
 static void displayInfo(struct Counter performance,struct Counter emCounter,struct Counter dropCounter,struct Counter pickUpCounter,struct ConvVars convVars);
 
 //
+uint32_t readWatch(void);                 //Reads the watch and returns it's value
 
 //
 static uint32_t sendMes(uint32_t mesID);
@@ -158,15 +148,24 @@ static struct Counter countUp(struct Counter counter);
 //btns
 static struct ConvVars readSensors(struct ConvVars convVars);
 
+static struct ConvVars readyForBlock(struct ConvVars convVars);
+
+static struct ConvVars pauseSystem(struct ConvVars convVars);
+static struct ConvVars resumeSystem(struct ConvVars convVars);
+
+static void processMessage(canMessage_t msg);
 
 
+uint32_t executionTime=0;
+uint32_t executionStart=0;
+uint32_t executionEnd=0;
 
 /**
 This is the main function of the program
 */
 int main() {
   uint8_t error;
-
+  
   /* Initialise the hardware */
   bspInit();
   conveyorInit();
@@ -207,8 +206,8 @@ int main() {
   
   
   
-  //initWatch();
-  //startWatch();
+  initWatch();
+  startWatch();
   OSStart();                                                  
   
   /* Should never arrive here */ 
@@ -249,60 +248,10 @@ static void appTaskCanRead(void *pdata) {
     ledToggle(USB_CONNECT_LED);
     OSSemPend(can1RxSem, 0, &error);
     msg = can1RxBuf;
-    convVars.lastRecieved=msg.id;
-    if(msg.id==START){
-      convVars.lastSentMsg=sendMes( START_ACK_CONV);
-      if(convVars.emStop){
-        convVars=resetSystem(convVars);
-      }else{
-        convVars=startSystem(convVars);
-      }
-    }else if(msg.id==PAUSE){
-      convVars.lastSentMsg=sendMes( PAUSE_ACK_CONV);
-      convVars.pause=55;
-      convVars.resume=0;
-    }else if(msg.id==RESUME){
-      convVars.lastSentMsg=sendMes( RESUME_ACK_CONV);
-      convVars.resume=66;
-      convVars.pause=0;
-    }else if(msg.id==ACK_PICKUP_CONV){
-      convVars.rob2ACK=78;
-      
-      //robot 1 request drop
-    }else if(msg.id==REQ_DROP_CONV && !convVars.stopConv){    
-      if(!convVars.convS1){
-        convVars.stopConv=76;
-        convVars.lastSentMsg=sendMes(ACK_DROP_CONV);
-        convVars.successDrop=0;
-      }else{
-        convVars.lastSentMsg=sendMes(NACK_DROP_CONV);
-      }
-    } else if(msg.id==CHK_CONV_PICKUP){
-      if(!convVars.blockEndWaiting){
-        convVars.lastSentMsg=sendMes( ACK_CHK_CONV_PICKUP);     
-        convVars.rob2ACK=0;
-      }else{
-        convVars.lastSentMsg=sendMes( NACK_CHK_CONV_PICKUP);       
-      }
-    }else if(msg.id==RESET){
-      convVars.lastSentMsg=sendMes( RESET_ACK_CONV);
-    }else if(msg.id==CTRL_STOP){
-      convVars.ctrlStop=99;
-      convVars.lastSentMsg=sendMes( CTRL_STOP_ACK_CONV);
-    }else if(msg.id==EM_STOP){
-      convVars.lastSentMsg=sendMes(EM_STOP_ACK_CONV);
-      convVars=emController(convVars);
-    }else if(msg.id==CHK_CONV_DROP){
-      //if(convVars.convS1){ // GRUFF I CHANGED THIS LINE SO THAT ROBOT1 PICKS UP THE BLOCK QUICKER. IT USED TO CHECK WHETHER THE BLOCK WAS THERE THROUGH A VARIABLE THAT ONLY UPDATED AFTER A DELAY. NOW IT JUST CHECKS THE SENSOR VALUE IMIDIATLY. ROBOT 1 NOW CAN CONTINUE ON WITH ITS LIFE MUCH FASTER.
-      if(convVars.successDrop){
-        convVars.lastSentMsg=sendMes(ACK_CHK_CONV_DROP);  
-      }else{
-        convVars.lastSentMsg=sendMes( NACK_CHK_CONV_DROP); 
-      }
-    }
+    processMessage(msg);
+    executionEnd = readWatch();
   }
 }
-
 
 
 /**
@@ -334,24 +283,24 @@ static void appTaskBtns(void *pdata) {
       convVars.stopConv=77;
     }else if (btnBool.jsRTPressed && (!isButtonPressedInState(btnState, JS_RIGHT))) {
       btnBool.jsRTPressed = 0;
-          convVars.stopConv=77;
+      convVars.stopConv=77;
     }else if (btnBool.jsUpPressed && (!isButtonPressedInState(btnState, JS_UP))) {
       btnBool.jsUpPressed = 0;
-          convVars.stopConv=77;
-
+      convVars.stopConv=77;
+      
     }else if (btnBool.jsDownPressed && (!isButtonPressedInState(btnState, JS_DOWN))) {
       btnBool.jsDownPressed = 0;
-    convVars.stopConv=77;
-
+      convVars.stopConv=77;
+      
     }else if (btnBool.jsCentPressed && (!isButtonPressedInState(btnState, JS_CENTRE))) {
       btnBool.jsCentPressed = 0;
-    convVars.stopConv=77;
-
+      convVars.stopConv=77;
+      
     }else if (btnBool.but1Pressed && (!isButtonPressedInState(btnState, BUT_1))) {//left button
       btnBool.but1Pressed = 0;
       conveyorSetState(CONVEYOR_OFF);   
-          convVars.blockCount=0;        
-
+      convVars.blockCount=0;        
+      
     }else if (btnBool.but2Pressed && (!isButtonPressedInState(btnState, BUT_2))) {//right button
       btnBool.but2Pressed = 0;
       convVars.start=49;
@@ -366,7 +315,7 @@ static void appTaskCtrlConv(void *pdata) {
   //performance analysis
   struct Counter performanceC={0,0,0,0,0};
   
-  
+  //timer counters
   struct Counter emCounter={0,0,0,0,0};
   struct Counter dropCounter={0,0,0,0,0};
   struct Counter pickUpCounter={0,0,0,0,0};
@@ -374,10 +323,11 @@ static void appTaskCtrlConv(void *pdata) {
   
   //static struct ButtonBool btnBool={0,0,0,0,0,0,0};
   uint32_t emTimeOut=50000;//conveyer timeout for emergency stop
-  uint32_t dropDelay=5000;//The delay for when robot1 picks a block up
-  uint32_t pickUpDelay=2000;
-  //uint32_t btnState;
+  uint32_t dropDelay=2000;//The delay for when robot1 picks a block up
+  uint32_t pickUpDelay=1000;
   while (true) {
+    
+    
     //starting loop & in emergency stop
     /**
     while(convVars.emStopConv){
@@ -389,6 +339,10 @@ static void appTaskCtrlConv(void *pdata) {
   }
   }
     **/
+    while(convVars.emStopConv||convVars.emStop){
+      displayInfo(performanceC,  emCounter,dropCounter,pickUpCounter,  convVars);
+      OSTimeDly(50);
+    }
     /**
     This is the while loop for the idle state.
     **/
@@ -407,25 +361,10 @@ static void appTaskCtrlConv(void *pdata) {
       displayInfo(performanceC,  emCounter,dropCounter,pickUpCounter,  convVars);
       OSTimeDly(50);
     }
-    //msgGlobal.id=0;
-    
-    
-    
-    
-    // **/  
-    //      convVars.start=41;//move back
-    
-    
-    //main running loop
-    
     /**
     This is the while loop for the running state
     */
     while (true) {
-      //msg.id=0;
-      // msg=msgGlobal;
-      //checks for emergency stop
-      
       /**
       This if statement is triggered when an emergency stop is called by the controller. it stops the conveyer belt motor and breaks the running state while loop to move to the emergency stop state
       */
@@ -437,7 +376,6 @@ static void appTaskCtrlConv(void *pdata) {
       This if statement is for the conveyer to trigger an emergency stop. It works by incrementing a timer while the conveyer is moving a block. 
       If the conveyer runs for too long without a block being removed then an emergency stop is called and a message is sent to the controller and the running while loop is broken and the state changes to emergency stop.
       */
-      //for the time out emergency stop
       if(convVars.blockCount&&!convVars.blockEndWaiting){
         emCounter=countUp(emCounter);
         emCounter.blockTimeOut1+=emCounter.y3;
@@ -452,11 +390,11 @@ static void appTaskCtrlConv(void *pdata) {
         emCounter=countUp(emCounter);
       }
       emCounter.blockTimeOut2+=emCounter.y3;
-      //breaks without
       /**
       This state is used to trigger a controlled stop. This means that once the conveyer has finished trans... may need more code timer etc...
       */
       if(convVars.ctrlStop){
+        conveyorSetState(CONVEYOR_OFF); 
         if(!convVars.stopConv&&!convVars.blockCount){
           convVars.start=0;
           break;     
@@ -472,15 +410,8 @@ static void appTaskCtrlConv(void *pdata) {
           displayInfo( performanceC, emCounter,dropCounter,pickUpCounter,  convVars);
         }
       }
-      //**/
-
-      
-      //coveyer recieves drop request
-      
       //read sensors
-      convVars=readSensors(convVars);
-      
-      
+      convVars=readSensors(convVars);    
       /**
       This if statement is used to stop the conveyer when a message has been recieved from robot1 that a block is ready.
       */
@@ -497,73 +428,30 @@ static void appTaskCtrlConv(void *pdata) {
         pickUpCounter=countUp(pickUpCounter);
         pickUpCounter.blockTimeOut1=0;
       }
-      pickUpCounter.blockTimeOut2+=pickUpCounter.y3;
-      
-      
-      
-      /**
-      These if statements are used to check if 
-      */
-      if (convVars.stopConv && convVars.convS1){
-        dropCounter=countUp(dropCounter);
-        dropCounter.blockTimeOut1+=dropCounter.y3;
-      }else{
-        dropCounter.blockTimeOut1=0;
-        dropCounter=countUp(dropCounter);
-      }
-      dropCounter.blockTimeOut2+=dropCounter.y3;
-      
-      /**
-      This if statement is triggered when a block has been successfully dropped by robot1
-      */
-      if(convVars.stopConv && convVars.convS1 && (dropCounter.blockTimeOut1>dropDelay)){
-        dropCounter.blockTimeOut1=0;
-        convVars=successfulDrop(convVars);     
-        //normal running with conveyer on
-        
-        /**
-        This if statement is triggered when a block is on the conveyer belt and should be moved along.
-        */
-      }else if(!convVars.blockEndWaiting && !convVars.stopConv && convVars.blockCount && !convVars.convS2){
+      pickUpCounter.blockTimeOut2+=pickUpCounter.y3;    
+   
+      if(!convVars.blockEndWaiting && !convVars.stopConv && convVars.blockCount && !convVars.convS2){
         if(conveyorGetState() !=CONVEYOR_REVERSE){
           conveyorSetState(CONVEYOR_REVERSE);
         }
-        
         /**
         This if statement is triggered when a block reaches the end of the conveyer belt
         */
       }else if(convVars.blockCount  && convVars.convS2){//&& !convVars.blockEndWaiting
         conveyorSetState(CONVEYOR_OFF);
         convVars.blockEndWaiting=6;
-        
         /**
         This if statement is used to send a message to robot2 to request they pickup a block. if they have responded with an ACK then the if statement wont be triggered.
         */
-        
-                if(convVars.performance){
-          performanceC=countUp(performanceC);
-          performanceC.blockTimeOut1+=performanceC.y3;
-        }
         if(!convVars.rob2ACK){
           convVars.lastSentMsg=sendMes(REQ_PICKUP_CONV);
-          convVars.performance=72;
-        }else {
-          convVars.performance=0;
+          if(!convVars.performance){            
+          }
+          convVars.performance=55;
         }
-        /**
-                if(convVars.performance){
-          performanceC=countUp(performanceC);
-          performanceC.blockTimeOut1+=performanceC.y3;
-        }
-        if(convVars.stopConv &&!convVars.performance){
-          convVars.performance=72;
-          performanceC.blockTimeOut1=0;
-        }else if(!convVars.stopConv){
-          convVars.performance=0;
-        }
-**/
-
-        // \/this is when a block is removed\/
+        
+        
+        
         /** 
         This if statement is triggered when a block is sucessfully removed
         */
@@ -590,49 +478,61 @@ static void appTaskCtrlConv(void *pdata) {
   } 
 }
 
-
-
 /**
-This function is used to display system information to the LCD screen
+This function is used to process the message recieved from the CAN bus
 */
-static void displayInfoszzz(uint32_t lastSentMsg,struct Counter emCounter,struct Counter dropCounter,struct Counter pickUpCounter,struct ConvVars convVars){
-  
-  ///**
-  
-  //conveyer display
-  // uint8_t error;
-  
-  OSSemPend(LCDsem, 0, &error);
-  lcdSetTextPos(1, 0);
-  lcdWrite("ConvS 1|2  :%02u|%02u     ",convVars.convS1,convVars.convS2);
-  lcdSetTextPos(1, 1);
-  lcdWrite("blckNo:%2u stoConv:%2u    ",convVars.blockCount,convVars.stopConv);
-  lcdSetTextPos(1, 2);
-  lcdWrite("CanIn/Out:%02u|%02u       ",convVars.lastRecieved,lastSentMsg);
-  lcdSetTextPos(1, 3);
-  lcdWrite("start      :%3u           ",convVars.start);
-  
-  //lcdSetTextPos(1, 3);
-  //lcdWrite("DrPu:%05u|%05u        ",dropCounter.blockTimeOut2,pickUpCounter.blockTimeOut2);
-  
-  lcdSetTextPos(1, 4); 
-  lcdWrite("emC/CV/TO:%2u|%2u|%05d   ",convVars.emStop,convVars.emStopConv,emCounter.blockTimeOut1);  
-  lcdSetTextPos(1, 5);
-  lcdWrite("s-Drp/Pck:%02u|%02u      ",convVars.successDrop,convVars.successPick); 
-  lcdSetTextPos(1, 6); 
-  lcdWrite("Rob2 ACK :%3u           ",convVars.rob2ACK);  
-  lcdSetTextPos(1, 7); 
-  lcdWrite("blkNdWait:%3u           ",convVars.blockEndWaiting);  
-  lcdSetTextPos(1, 8); 
-  lcdWrite("Delay D/P:%05u|%05u      ",dropCounter.blockTimeOut1,pickUpCounter.blockTimeOut1); 
-  lcdSetTextPos(1, 9); 
-  lcdWrite("|| / |>  :%02u|%02u     ",convVars.pause,convVars.resume); 
-  lcdSetTextPos(1, 10); 
-  //lcdWrite("test :%2u~%2u~%2u~%2u~%2u~ ",convVars.test0,convVars.test1,convVars.test2,convVars.test3,convVars.test4); 
-  //  **/
-  error = OSSemPost(LCDsem);
-  
+static void processMessage(canMessage_t msg){
+  convVars.lastRecieved=msg.id;
+  if(msg.id==START){
+    convVars.lastSentMsg=sendMes( START_ACK_CONV);
+    if(convVars.emStop){
+      convVars=resetSystem(convVars);
+    }else{
+      convVars=startSystem(convVars);
+    }
+  }else if(msg.id==PAUSE){
+    convVars.lastSentMsg=sendMes( PAUSE_ACK_CONV);
+    convVars=pauseSystem(convVars);
+  }else if(msg.id==RESUME){
+    convVars.lastSentMsg=sendMes( RESUME_ACK_CONV);
+    convVars=resumeSystem(convVars);
+  }else if(msg.id==ACK_PICKUP_CONV){
+    convVars.rob2ACK=78;
+    convVars.performance=0;
+  }else if(msg.id==REQ_DROP_CONV && !convVars.stopConv){    
+    if(!convVars.convS1){
+      convVars.lastSentMsg=sendMes(ACK_DROP_CONV);
+    convVars=readyForBlock(convVars);
+    }else{
+      convVars.lastSentMsg=sendMes(NACK_DROP_CONV);
+    }
+  } else if(msg.id==CHK_CONV_PICKUP){
+    if(!convVars.blockEndWaiting){
+      convVars.lastSentMsg=sendMes( ACK_CHK_CONV_PICKUP);  
+      convVars.rob2ACK=0;
+    }else{
+      convVars.lastSentMsg=sendMes( NACK_CHK_CONV_PICKUP);       
+    }
+  }else if(msg.id==RESET){
+    convVars.lastSentMsg=sendMes( RESET_ACK_CONV);
+    resetSystem(convVars);
+  }else if(msg.id==CTRL_STOP){
+    convVars.ctrlStop=99;
+    convVars.lastSentMsg=sendMes( CTRL_STOP_ACK_CONV);
+  }else if(msg.id==EM_STOP){
+    convVars.lastSentMsg=sendMes(EM_STOP_ACK_CONV);
+    convVars=emController(convVars);
+  }else if(msg.id==CHK_CONV_DROP){
+    if(convVars.convS1){//convVars.successDrop
+      convVars.lastSentMsg=sendMes(ACK_CHK_CONV_DROP);  
+      convVars=successfulDrop(convVars);
+    }else{
+      convVars.lastSentMsg=sendMes( NACK_CHK_CONV_DROP); 
+    }
+  }
 }
+
+
 /**
 This function is used to display system information to the LCD screen
 */
@@ -642,7 +542,12 @@ static void displayInfo(struct Counter performanceC,struct Counter emCounter,str
   
   //conveyer display
   // uint8_t error;
-  
+  if(executionEnd > executionStart)  {  // Test for overflow of register
+    executionTime = (executionEnd - executionStart);
+  }else{
+    executionTime=666;
+  }
+
   OSSemPend(LCDsem, 0, &error);
   lcdSetTextPos(1, 0);
   lcdWrite("ConvS 1|2  :%02u|%02u     ",convVars.convS1,convVars.convS2);
@@ -651,31 +556,36 @@ static void displayInfo(struct Counter performanceC,struct Counter emCounter,str
   lcdSetTextPos(1, 2);
   lcdWrite("CanIn/Out:%02u|%02u       ",convVars.lastRecieved,convVars.lastSentMsg);
   lcdSetTextPos(1, 3);
-  lcdWrite("start      :%3u           ",convVars.start);
-  
+  lcdWrite("start:%3u stop:%3u           ",convVars.start,convVars.ctrlStop);
+  lcdSetTextPos(1, 4); 
+  lcdWrite("|| / |>  :%02u|%02u     ",convVars.pause,convVars.resume); 
   //lcdSetTextPos(1, 3);
   //lcdWrite("DrPu:%05u|%05u        ",dropCounter.blockTimeOut2,pickUpCounter.blockTimeOut2);
   
-  lcdSetTextPos(1, 4); 
-  lcdWrite("emC/CV/TO:%2u|%2u|%05d   ",convVars.emStop,convVars.emStopConv,emCounter.blockTimeOut1);  
-  lcdSetTextPos(1, 5);
+  lcdSetTextPos(1, 5); 
+  lcdWrite("eCO/eCV/TO:%2u|%2u|%05d   ",convVars.emStop,convVars.emStopConv,emCounter.blockTimeOut1);  
+  lcdSetTextPos(1, 6);
   lcdWrite("s-Drp/Pck:%02u|%02u      ",convVars.successDrop,convVars.successPick); 
-  lcdSetTextPos(1, 6); 
-  lcdWrite("Rob2 ACK :%3u           ",convVars.rob2ACK);  
   lcdSetTextPos(1, 7); 
-  lcdWrite("blkNdWait:%3u           ",convVars.blockEndWaiting);  
+  lcdWrite("Rob2 ACK :%3u           ",convVars.rob2ACK);  
   lcdSetTextPos(1, 8); 
-  lcdWrite("Delay D/P:%05u|%05u      ",dropCounter.blockTimeOut1,pickUpCounter.blockTimeOut1); 
-  //lcdSetTextPos(1, 9); 
-  //lcdWrite("|| / |>  :%02u|%02u     ",convVars.pause,convVars.resume); 
+  lcdWrite("blkNdWait:%3u           ",convVars.blockEndWaiting);  
   lcdSetTextPos(1, 9); 
-  lcdWrite("p %3u time(%06u)",convVars.performance,performanceC.blockTimeOut1); 
-
+  lcdWrite("Delay D/P:%05u|%05u      ",dropCounter.blockTimeOut1,pickUpCounter.blockTimeOut1); 
+  
+  
+  
   lcdSetTextPos(1, 10); 
+  lcdWrite("exeTi %010u",executionTime); 
   
   //  **/
   error = OSSemPost(LCDsem);
-  
+
+}
+static struct ConvVars readyForBlock(struct ConvVars convVars){
+      convVars.successDrop=0;
+      convVars.stopConv=76;
+return convVars;
 }
 /**
 This function is used to set the system variables in the event of an emergency stop triggered by the conveyer belt
@@ -693,6 +603,7 @@ static struct ConvVars emConveyerTimeout(struct ConvVars convVars){
 This function is used to set the system variables in the event of an emergency stop triggered by the controller
 */
 static struct ConvVars emController(struct ConvVars convVars){
+  convVars.emStopConv=83;
   convVars.emStop=89;
   convVars.start=0;
   convVars.blockCount=0;
@@ -700,12 +611,14 @@ static struct ConvVars emController(struct ConvVars convVars){
   convVars.blockEndWaiting=0;
   return convVars;
 }
+
+
 /**
 This function is used to set the system variables in the event of a reset after an emergency stop
 */
 static struct ConvVars resetSystem(struct ConvVars convVars){
-  convVars.start=44; 
   convVars.emStop=0;
+  convVars.emStopConv=0;
   return convVars;
 }
 /**
@@ -713,29 +626,34 @@ This function is used to set the system variables when the system is started
 */
 static struct ConvVars startSystem(struct ConvVars convVars){
   convVars.start=48;
-  convVars.emStop=0;
   return convVars;
 }
 /**
 This function is used to set the system variables when a block is dropped on the conveyer belt
 */
 static struct ConvVars successfulDrop(struct ConvVars convVars){
-  //OSTimeDly(500);//2500
-  convVars.blockCount++;
-  convVars.stopConv=0;
-  convVars.successDrop=91;
+      convVars.stopConv=0;
+      convVars.successDrop=99;
+      convVars.blockCount++;
   return convVars;
 }
-/**
-*/
+static struct ConvVars pauseSystem(struct ConvVars convVars){
+  convVars.pause=55;
+  convVars.resume=0;
+  return convVars;
+}
+static struct ConvVars resumeSystem(struct ConvVars convVars){
+  convVars.resume=66;
+  convVars.pause=0;
+  return convVars;
+}
+
 static struct Counter countUp(struct Counter counter){
   counter.y1=OSTimeGet();
   counter.y3=counter.y1-counter.y2;
   counter.y2=counter.y1;
   return counter;
 }
-/**
-*/
 
 
 /**
@@ -763,6 +681,7 @@ This function is the CAN interrupt handler. It is only triggered when a message 
 It posts the semaphore pended by the system task appTaskCanRead, so that once a message is recieved it is imediately processed by the task.
 */
 static void canHandler(void) {
+      executionStart = readWatch();
   if (canReady(CAN_PORT_1)) {
     canRead(CAN_PORT_1, &can1RxBuf);
     OSSemPost(can1RxSem);
@@ -783,4 +702,9 @@ static struct ConvVars readSensors(struct ConvVars convVars){
     convVars.convS2=0;
   }
   return convVars;
+}
+uint32_t readWatch(void){
+  uint32_t counter = 0;
+  counter = T1TC;  // get the value of the timer counter
+  return counter;  // return the value of the timer
 }
