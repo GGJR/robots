@@ -64,7 +64,11 @@ struct ConvVars{
   uint32_t lastSentMsg;//the last message sent on the CAN
   
   
-  uint32_t test0;
+  uint8_t test0;
+  uint8_t test1;
+  uint8_t test2;
+  uint8_t test3;
+
   uint32_t performance;
   
 };
@@ -514,8 +518,8 @@ static void processMessage(canMessage_t msg){
       convVars.lastSentMsg=sendMes( NACK_CHK_CONV_PICKUP);       
     }
   }else if(msg.id==RESET){
+        convVars=resetSystem(convVars);
     convVars.lastSentMsg=sendMes( RESET_ACK_CONV);
-    resetSystem(convVars);
   }else if(msg.id==CTRL_STOP){
     convVars.ctrlStop=99;
     convVars.lastSentMsg=sendMes( CTRL_STOP_ACK_CONV);
@@ -576,8 +580,8 @@ static void displayInfo(struct Counter performanceC,struct Counter emCounter,str
   
   
   lcdSetTextPos(1, 10); 
-  lcdWrite("exeTi %010u",executionTime); 
-  
+  //lcdWrite("exeTi %010u",executionTime); 
+  lcdWrite("t0 :%02u t1 :%02u",convVars.test0,convVars.test1);
   //  **/
   error = OSSemPost(LCDsem);
 
@@ -593,10 +597,7 @@ This function is used to set the system variables in the event of an emergency s
 static struct ConvVars emConveyerTimeout(struct ConvVars convVars){
   convVars.emStopConv=81;
   convVars.emStop=82;
-  convVars.start=0;
-  convVars.blockCount=0;
-  convVars.stopConv=0;
-  convVars.blockEndWaiting=0;   
+
   return convVars;
 }
 /**
@@ -605,10 +606,7 @@ This function is used to set the system variables in the event of an emergency s
 static struct ConvVars emController(struct ConvVars convVars){
   convVars.emStopConv=83;
   convVars.emStop=89;
-  convVars.start=0;
-  convVars.blockCount=0;
-  convVars.stopConv=0;
-  convVars.blockEndWaiting=0;
+
   return convVars;
 }
 
@@ -619,6 +617,14 @@ This function is used to set the system variables in the event of a reset after 
 static struct ConvVars resetSystem(struct ConvVars convVars){
   convVars.emStop=0;
   convVars.emStopConv=0;
+    convVars.start=0;
+  convVars.blockCount=0;
+  convVars.stopConv=0;
+  convVars.blockEndWaiting=0;
+  convVars.successDrop=0;
+  
+  convVars.test1=94;
+  
   return convVars;
 }
 /**
