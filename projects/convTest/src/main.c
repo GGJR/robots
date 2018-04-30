@@ -1,13 +1,4 @@
 /* Conveyor Test
-* JS UP -> forward
-*    DN -> reverse
-*    L,R -> stop
-* 
-* Conveyor sensor 1 reported  on interface LED 1 and LINK LED
-* Conveyor sensor 2 reported  on interface LED 2 and CONNECT LED
-*
-* item sensed at 1 and moving in reverse -> stop
-* item sensed at 2 and moving forward -> stop
 
 Gruff James
 Date-29/04/18 //nearly done
@@ -63,6 +54,7 @@ struct GeneralVars{
   uint8_t lastRecieved;//the last message recieved from the CAN
   uint32_t lastSentMsg;//the last message sent on the CAN
   
+  //testing variables for debugging
   uint8_t test0;
   uint8_t test1;
   uint8_t test2;
@@ -95,10 +87,10 @@ struct ButtonBool{
 
 
 
-
+//intisation of globals
 static canMessage_t can1RxBuf;
 static struct ButtonBool btnBool={0,0,0,0,0,0,0};
-static struct GeneralVars generalVars={0,0,0,0,0,0,0,0,0,0};
+static struct GeneralVars generalVars={0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 INT8U error;
 /*************************************************************************
 *                  PRIORITIES
@@ -472,8 +464,9 @@ static void processMessage(canMessage_t msg){
     generalVars.lastSentMsg=sendMes( PAUSE_ACK_CONV);//acknowledgement of the pause 
     generalVars=pauseSystem(generalVars);
   }else if(msg.id==RESUME){//resumes the system from a pause
+      generalVars=resumeSystem(generalVars);
+      generalVars.pause=0;
     generalVars.lastSentMsg=sendMes( RESUME_ACK_CONV);//acknowledgement of the resume
-    generalVars=resumeSystem(generalVars);
   }else if(msg.id==RESET){//resets the system after an emergency stop
     generalVars=resetSystem(generalVars);
     generalVars.lastSentMsg=sendMes( RESET_ACK_CONV);//acknowledgement of the reset
@@ -597,6 +590,9 @@ static struct GeneralVars resetSystem(struct GeneralVars generalVars){
   generalVars.stopConv=0;
   generalVars.blockEndWaiting=0;
   generalVars.successDrop=0;
+  generalVars.rob2ACK=0;
+  generalVars.pause=0;
+  generalVars.resume=0;
   return generalVars;
 }
 /**
