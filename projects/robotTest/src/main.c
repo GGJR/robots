@@ -1,8 +1,6 @@
-/* Test Robot
- * Joystick UP    -> inc current joint coordinate
- * Joystick DOWN  -> dec current joint coordinate
- * Joystick RIGHT -> cycle joint selection HAND -> WRIST -> ELBOW -> WAIST
- * Joystick left  -> cycle joint selection HAND <- WRIST <- ELBOW <- WAIST
+/* Robot 1 (Input Robot)
+ * Joel O'Halleron (w14012537)
+ * Last Edited: 29/4/2018
  */
 #include <stdbool.h>
 #include <ucos_ii.h>
@@ -24,30 +22,38 @@
 *                       PRIORITIES
 ***************************************************************************/
 
-enum {DISPLAY_MUTEX_PRIO = 5,
-      APP_TASK_CAN_RECEIVE_PRIO,
-      APP_TASK_CAN_MONITOR_PRIO,
-      APP_TASK_BUTTONS_PRIO};
+enum {
+      APP_TASK_CAN_RECEIVE_PRIO = 5,
+      APP_TASK_ROBOT_CONTROL_PRIO,
+      APP_TASK_CAN_SEND_PRIO,
+      APP_TASK_CAN_MONITOR_PRIO};
 
 /****************************************************************************
 *                  APPLICATION TASK STACKS
 ****************************************************************************/
 
-enum {APP_TASK_BUTTONS_STK_SIZE = 256,
+enum {
       APP_TASK_CAN_RECEIVE_STK_SIZE = 256,
-      APP_TASK_CAN_MONITOR_STK_SIZE = 256};
+      APP_TASK_ROBOT_CONTROL_STK_SIZE = 256,
+      APP_TASK_CAN_MONITOR_STK_SIZE = 256,
+      APP_TASK_CAN_SEND_STK_SIZE = 256};
 
-static OS_STK appTaskButtonsStk[APP_TASK_BUTTONS_STK_SIZE];
+
 static OS_STK appTaskCanReceiveStk[APP_TASK_CAN_RECEIVE_STK_SIZE];
+static OS_STK appTaskCanSendStk[APP_TASK_CAN_SEND_STK_SIZE];
 static OS_STK appTaskCanMonitorStk[APP_TASK_CAN_MONITOR_STK_SIZE];
+static OS_STK appTaskRobotControlStk[APP_TASK_ROBOT_CONTROL_STK_SIZE];
 
 /*****************************************************************************
 *                APPLICATION FUNCTION PROTOTYPES
 *****************************************************************************/
 
-static void appTaskButtons(void *pdata);
+
 static void appTaskCanReceive(void *pdata);
 static void appTaskCanMonitor(void *pdata);
+static void appTaskRobotControl(void *pdata);
+static void appTaskCanSend(void *pdata);
+
 
 /*
 *************************************************************************
@@ -60,6 +66,9 @@ void pickUpPad1(void);
 void moveAboveConveyor(void);
 void dropBlockConveyor(void);
 void setRobotStart(void);
+void sendMessage(uint32_t);
+void setState(uint32_t NEWSTATE);
+void processMessage(uint32_t msgID);
 
 /*
 *************************************************************************
@@ -68,11 +77,18 @@ void setRobotStart(void);
 */
 
 static OS_EVENT *can1RxSem;
-static OS_EVENT *LCDsem;
+static OS_EVENT *STATEsem;
+static OS_EVENT *MessageBufSem;
 static canMessage_t can1RxBuf;
 static uint32_t STATE;
+static bool ROBOT_MOVING;
+static uint32_t canMessageBuf[5];
 INT8U error;
-static int retries = 0;
+static bool nack_conv_recieved;
+static int retries = 1;
+static bool PAD1_WAITING;
+static bool ROBOT_HAS_BLOCK;
+static uint32_t LASTSTATE;
 
 
 /*****************************************************************************
@@ -90,11 +106,6 @@ int main() {
   /* Initialise the OS */
   OSInit();                                                   
 
-  /* Create Tasks */
-  OSTaskCreate(appTaskButtons,                               
-               (void *)0,
-               (OS_STK *)&appTaskButtonsStk[APP_TASK_BUTTONS_STK_SIZE - 1],
-               APP_TASK_BUTTONS_PRIO);
  
   OSTaskCreate(appTaskCanReceive,                               
                (void *)0,
@@ -106,9 +117,22 @@ int main() {
                (OS_STK *)&appTaskCanMonitorStk[APP_TASK_CAN_MONITOR_STK_SIZE - 1],
                APP_TASK_CAN_MONITOR_PRIO);
   
+  OSTaskCreate(appTaskRobotControl,                               
+               (void *)0,
+               (OS_STK *)&appTaskRobotControlStk[APP_TASK_ROBOT_CONTROL_STK_SIZE - 1],
+               APP_TASK_ROBOT_CONTROL_PRIO);
+  
+  OSTaskCreate(appTaskCanSend,                               
+               (void *)0,
+               (OS_STK *)&appTaskCanSendStk[APP_TASK_CAN_SEND_STK_SIZE - 1],
+               APP_TASK_CAN_SEND_PRIO);
+  
+  
   /* Create Semaphores and Mutexes */
-  can1RxSem = OSSemCreate(1);
-  LCDsem = OSSemCreate(1);
+  can1RxSem = OSSemCreate(0);
+
+  STATEsem = OSSemCreate(1);
+  MessageBufSem = OSSemCreate(1);
 
   /* Start the OS */
   OSStart();                                                  
@@ -122,246 +146,199 @@ int main() {
 ****************************************************************************/
 
 
-static void appTaskButtons(void *pdata) {
-  
-  uint32_t btnState;
-  static uint8_t joint = ROBOT_HAND;
-  static uint32_t leds[5] = {D1_LED, D1_LED, D2_LED, D3_LED, D4_LED};
-  static bool jsRightPressed = false;
-  static bool jsLeftPressed = false;
-  
-  /* the main task loop for this task  */
-  while (true) {
-    btnState = buttonsRead();
-    if (isButtonPressedInState(btnState, JS_RIGHT)) {
-      jsRightPressed = true;
-    }
-    if (jsRightPressed && (!isButtonPressedInState(btnState, JS_RIGHT))) {
-      jsRightPressed = false;
-      interfaceLedSetState(leds[joint], LED_OFF);
-      joint += 1;
-      if (joint > N_JOINTS) {
-        joint = 1;
-      }
-    }
-    if (isButtonPressedInState(btnState, JS_LEFT)) {
-      jsLeftPressed = true;
-    }
-    if (jsLeftPressed && (!isButtonPressedInState(btnState, JS_LEFT))) {
-      jsLeftPressed = false;
-      interfaceLedSetState(leds[joint], LED_OFF);
-      joint -= 1;
-      if (joint == 0) {
-        joint = N_JOINTS;
-      }
-    }
-    interfaceLedSetState(leds[joint], LED_ON);
-    
-    if (isButtonPressedInState(btnState, JS_UP)) {
-      
-      robotMoveJointTo(ROBOT_ELBOW, 83500);
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_WAIST, 86950);  
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_HAND, 45000);
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_WRIST, 90000);
-      OSTimeDly(500); 
-      robotMoveJointTo(ROBOT_ELBOW, 99500);
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_ELBOW, 100000);
-      OSTimeDly(500);
-      robotMoveJointTo(ROBOT_HAND, 71000);
-      OSTimeDly(500);
-      
-      lcdSetTextPos(8, 6+joint);
-      lcdWrite("%08u", robotJointGetState((robotJoint_t)joint));
-    } else if (isButtonPressedInState(btnState, JS_DOWN)) {
-      robotMoveJointTo(ROBOT_ELBOW, 83500);
-      robotMoveJointTo(ROBOT_WAIST, 45000);
-      robotMoveJointTo(ROBOT_ELBOW, 100000);
-      robotMoveJointTo(ROBOT_HAND, 45000);
-      lcdSetTextPos(8, 6+joint);
-      lcdWrite("%08u", robotJointGetState((robotJoint_t)joint));
-    }
-    OSTimeDly(20);
-  }
-}
-  
-
+  /* 
+   * Main CANread task which reads the CAN bus and processes messages
+   * based on the message Enumeration
+  */
   static void appTaskCanReceive(void *pdata) {
   uint8_t error;
   canMessage_t msg;
   
   /* Install the CAN interrupt handler and start the OS ticker
-   * (must be done in the highest priority task)
-   */
+   * (must be done in the highest priority task)*/
+   
   canRxInterrupt(canHandler);
   osStartTick();
-  
     
-
   /* 
-   * Now execute the main task loop for this task
-   */     
+   * Now execute the main task loop for this task*/
+        
   while ( true ) {
     OSSemPend(can1RxSem, 0, &error);//Pending on access to the CAN semaphore
-	
-    msg = can1RxBuf;//The can message to be checked is taken from the CAN buffer
-    
-    //Start Message Response Code//
-	
-	//Make sure the Robot is not in an error state
-	if(STATE != EM_STOP){
-		//Check Robot is not paused
-		if(STATE != PAUSE){
-			//Start command received from the controller
-			if(msg.id == START && STATE < START)
-			{ 
-			  msg.id = START_ACK_ROB1;//Assigns the message START_ACK_ROB1 to the can message ID
-			  canWrite(CAN_PORT_1, &msg);//Acknowledge Start command
-			  
-			  setRobotStart()//Helper function to move robot joints into neutral position
-			  
-			  STATE = START;//Set robot to start state
-			}
-			
-			//Pause command received from the controller
-			if(msg.id == PAUSE)
-			{
-				msg.id = PAUSE_ACK_ROB1;//Assigns the message PAUSE_ACK_ROB1 to the can message ID
-				canWrite(CAN_PORT_1, &msg);//Acknowledge Start command
-				
-				STATE = PAUSE;
-			}	
-			
-			//If control pause command is received
-			if(msg.id == CTRL_STOP)
-			{
-				 msg.id = CTRL_STOP_ACK_ROB1;//Assigns the message CTRL_STOP_ACK_ROB1 to the can message ID
-				 canWrite(CAN_PORT_1, &msg);//Acknowledge Start command
-			}
-			
-			//Block detected on Pad 1, controller sends request for pick-up
-			if(msg.id == REQ_PICKUP_PAD1 && STATE < REQ_PICKUP_PAD1)
-			{
-			  msg.id = ACK_PICKUP_PAD1;//Assigns the message ACK_PICKUP_PAD1 to the can message ID
-			  canWrite(CAN_PORT_1, &msg);//Acknowledge the pickup request
-			  
-			  pickUpPad1();//Pick up block
-			  
-			  msg.id = CHK_PAD1_PICKUP;//Assigns the message CHK_PAD1_PICKUP to the can message ID
-			  canWrite(CAN_PORT_1, &msg);//Send controller the check for block pickup
-			  
-			  STATE = CHK_PAD1_PICKUP;//Set robot to the state of checking the success of Pad 1 pickup
-			 
-			}
-		   
-			//Unsuccessful Pickup
-			if(msg.id == NACK_CHK_PAD1_PICKUP && STATE == CHK_PAD1_PICKUP)
-			{ 
-				if(retries == 3)
-				{
-					STATE = EM_STOP;//In the event of the retries exceeding 3 the Robot enters an error state
-					msg.id = ERR_ROB1;//Assigns the message ERR_ROB1 to the can message ID
-					canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
-				}
-				else{
-				  pickUpPad1();//Helper function to pick up the block from Pad 1
-				  
-				  msg.id = CHK_PAD1_PICKUP;//Assigns the message CHK_PAD1_PICKUP to the can message ID
-				  canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
-				  
-				  retries++;//Increments the number of retries
-				  
-				  STATE = CHK_PAD1_PICKUP;//Robot is in the state of 'check the block has been picked up successfully'
-				  
-				  OSTimeDly(500);//System time delay in milliseconds
-				}
-			}
-		   
-			//Successful Pickup 
-			if(msg.id == ACK_CHK_PAD1_PICKUP && STATE == CHK_PAD1_PICKUP) 
-			{ 
-			  moveAboveConveyor();//Helper function to move the robot in position to drop the block on conveyor
-			  
-			  msg.id = REQ_DROP_CONV;//Assigns the message REQ_DROP_CONV to the can message ID
-			  canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
-			  STATE = REQ_DROP_CONV;//Robot has requested a drop on conveyor, and is awaiting a reply
-			}
-			
-			//Acknowledgment of conveyor, ready for drop off
-			if(msg.id == ACK_DROP_CONV && STATE == REQ_DROP_CONV) 
-			{
-			  dropBlockConveyor();//Helper function to drop the block onto the conveyor
-		 
-			  msg.id = CHK_CONV_DROP;//Assigns the message CHK_CONV_DROP to the can message ID
-			  canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
-			  STATE = CHK_CONV_DROP;//Robot believes the block is dropped and polls the conveyor
-			}
-			
-			//Acknowledgment of conveyor that block drop-off was successful
-			if(msg.id == ACK_CHK_CONV_DROP && STATE == CHK_CONV_DROP)
-			{
-			  setRobotStart();//Helper function sets joints to neutral
-			  STATE = START;//Resets the robot to it's starting state
-			}
-		}//End of non-paused state code
-		
-		//If controller sends a resume message
-		if(msg.id == RESUME && STATE == PAUSE)
-		{
-			STATE = RESUME;
-			
-			msg.id = RESUME_ACK_ROB1;//Assigns the message RESUME_ACK_ROB1 to the can message ID
-			canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can
-		}//End of paused state code
-		
-	}//End of non emergency stop state code
-	
-	//If the controller sends the reset signal, go back to starting position.
-	if(msg.id == RESET)
-	{
-		STATE = RESET_ACK_ROB1;//Set state to reset state
-		
-		msg.id = RESET_ACK_ROB1;//Assigns the message RESET_ACK_ROB1 to the can message ID
-		canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
-		
-		setRobotStart();//Reset robot joint locations to starting locations
-	}//End of emergency stop state code
-	
-	//End Message Response Code//
-
-    //Debug code displayed on LCD
-    interfaceLedToggle(D1_LED);
-    OSSemPend(LCDsem, 0, &error);
-    lcdSetTextPos(2,1);
-    lcdWrite(displayMessageContents[msg.id]); 
-    lcdSetTextPos(2,2);
-    lcdWrite("msg.id : %08d", msg.id); 
-    lcdSetTextPos(2,3);
-    lcdWrite("LEN    : %08x", msg.len); 
-    lcdSetTextPos(2,4);
-    lcdWrite("DATA_A : %08x", msg.dataA); 
-    lcdSetTextPos(2,5);
-    lcdWrite("DATA_B : %08x", msg.dataB);
-    
      
+    msg = can1RxBuf;//The can message to be checked is taken from the CAN buffer
 
-    error = OSSemPost(LCDsem);
+      processMessage(msg.id);
+    
+  }
+ }
+
+ /*
+  * Modular task to send messages during the run of the system dependent on
+  * the current STATE of the system
+ */
+static void appTaskCanSend(void *pdata) {
+  
+  while(true){
+    
+    if(STATE == EM_STOP)
+    {
+      sendMessage(EM_STOP_ACK_ROB1);
+    }else
+    if(STATE == RESET)
+    {
+	  retries = 1;
+      sendMessage(RESET_ACK_ROB1);
+    }else
+    if(STATE == ERR_ROB1)
+    {
+      sendMessage(ERR_ROB1);
+    } else
+    if(STATE == PAUSE)
+    {
+      sendMessage(PAUSE_ACK_ROB1);
+    }else
+     if(STATE == RESUME)
+    {
+      sendMessage(RESUME_ACK_ROB1);
+      setState(LASTSTATE);
+    }else
+      if(!ROBOT_MOVING)
+      {
+        if(STATE == REQ_PICKUP_PAD1 && !ROBOT_MOVING)
+        {
+         sendMessage(ACK_PICKUP_PAD1);
+        } else
+        if(STATE == CHK_PAD1_PICKUP && !ROBOT_MOVING)
+        {
+          sendMessage(CHK_PAD1_PICKUP);
+          OSTimeDly(500);
+        } else
+        if(STATE == REQ_DROP_CONV && !ROBOT_MOVING)
+        {
+          sendMessage(REQ_DROP_CONV);
+        } else
+        if(STATE == CHK_CONV_DROP && !ROBOT_MOVING)
+        {
+          sendMessage(CHK_CONV_DROP);
+        } else
+        if(STATE == NACK_CHK_CONV_DROP && !ROBOT_MOVING)
+        {
+          sendMessage(ERR_ROB1);
+        }
+      }
+    
+    OSTimeDly(50);
+  }
+  
+}
+
+
+/*
+ * Modular task to manage the physical actions of the robot depending on the system 
+ * STATE
+*/
+static void appTaskRobotControl(void *pdata)
+{
+ while (true) {
+   if(STATE != EM_STOP)
+   {
+    //Start State:
+    switch(STATE)
+    {
+      case RESET               :  ROBOT_MOVING = true;
+                                  setRobotStart(); //Helper function to move robot joints into neutral position
+                                  ROBOT_MOVING = false;
+                                  OSTimeDly(20);
+                                       break;
+      case START               :  ROBOT_MOVING = true;
+                                  setRobotStart();//Helper function to move robot joints into neutral position
+                                  ROBOT_MOVING = false;
+                                       break;
+      case REQ_PICKUP_PAD1     :  if(!ROBOT_HAS_BLOCK || !EM_STOP || !PAUSE)
+                                  {
+                                    ROBOT_MOVING = true;
+                                    pickUpPad1();//Pick up block
+                                    ROBOT_MOVING = false;
+                                  }
+                                  if(STATE == EM_STOP || STATE == PAUSE)
+                                      {
+                                        break;
+                                      }else
+                                    {setState(CHK_PAD1_PICKUP);} //Sets the state of the subsystem
+                                   break;
+      case ACK_CHK_PAD1_PICKUP :  ROBOT_MOVING = true;
+                                  moveAboveConveyor();//Helper function to move the robot in position to drop the block on conveyor
+                                  ROBOT_MOVING = false;
+                                  if(STATE == EM_STOP || STATE == PAUSE)
+                                  {
+                                    break;
+                                  }else
+                                  {setState(REQ_DROP_CONV);}
+                                       break;
+      case NACK_CHK_PAD1_PICKUP:  ROBOT_MOVING = true;
+                                  if(retries==4)
+                                  {
+                                    sendMessage(ERR_ROB1); //Function to send a message on the CAN
+                                  }
+                                  else{
+                                    retries++;
+                                    pickUpPad1();//Pick up block
+                                    setState(CHK_PAD1_PICKUP);
+                                  }
+                                  ROBOT_MOVING = false;
+                                       break;
+      case ACK_DROP_CONV       :  if(ROBOT_HAS_BLOCK)
+                                  {
+                                    ROBOT_MOVING = true;
+                                    dropBlockConveyor();//Helper function to drop the block onto the conveyor
+                                    ROBOT_MOVING = false;
+                                  }
+                                  if(STATE == EM_STOP || STATE == PAUSE)
+                                  {
+                                    break;
+                                  }else{
+                                  OSTimeDly(100);
+                                  setState(CHK_CONV_DROP);}
+                                       break;
+      default: break;
+    }
+   }
+   OSTimeDly(50);
   }
 }
 
 
+/*
+ * Modular task to monitor the system STATE and the current messages being received 
+ * on the CAN bus. Provides useful debug and system information.
+*/
 static void appTaskCanMonitor(void *pdata) {
-  uint8_t error;
+  canMessage_t msg;
   
   while (true) {
-    OSSemPend(LCDsem, 0, &error);
+
+    //Debug code displayed on LCD
+    interfaceLedToggle(D1_LED);
+    msg = can1RxBuf;
+    lcdSetTextPos(2,1);
+    lcdWrite(displayMessageContents[msg.id]);
+    lcdSetTextPos(2,2);
+    lcdWrite("msg.id : %08d", msg.id);
+    lcdSetTextPos(2,3);
+    lcdWrite("State: ");
+    lcdSetTextPos(2,4);
+    lcdWrite(displayMessageContents[STATE]);
     lcdSetTextPos(2,5);
-    lcdWrite("CAN1GSR: %08x", canStatus(CAN_PORT_1));
-    error = OSSemPost(LCDsem);
-    OSTimeDly(20);
+    lcdWrite("PAD1_WAITING : %d", PAD1_WAITING);
+    lcdSetTextPos(2,6);
+    lcdWrite("ROBOT_HAS_BLOCK : %d", ROBOT_HAS_BLOCK);
+    lcdSetTextPos(2,7);
+    lcdWrite("Retries: %d", retries);
+    lcdSetTextPos(2,8);
+    lcdWrite("Conv Nack: %d", nack_conv_recieved);
+    
+    OSTimeDly(500);
   }
 }
 
@@ -377,33 +354,68 @@ static void canHandler(void) {
   }
 }
 
+/*
+ * Useful function allowing input of a joint and the desired position
+ * allowing movement of the robot to these specified positions
+ *
+ * @param robotJoint_t joint Joint value based on the joint enumeration
+ *                           in Robot.h 
+ *
+ * @param uint32_t newPos    The desired position value for the joint in question
+*/
 void robotMoveJointTo(robotJoint_t joint, uint32_t newPos) {
   
   uint32_t targetPos = newPos;
   robotJointStep_t direction;
   
-  if(robotJointGetState(joint) > targetPos) {
-   direction = ROBOT_JOINT_POS_DEC;
-  }
-  else {
-    direction = ROBOT_JOINT_POS_INC;
-  }
-  
-  while(robotJointGetState(joint) != targetPos) {
-    robotJointSetState(joint, direction);
-    OSTimeDly(10);
+
+    if(robotJointGetState(joint) > targetPos) {
+     direction = ROBOT_JOINT_POS_DEC;
+    }
+    else {
+      direction = ROBOT_JOINT_POS_INC;
+    }
     
-  }
+    while(robotJointGetState(joint) != targetPos) {
+      
+         /*This code assists in the pause function
+		 * If pause is pressed as the robot has almost fully closed it's hand, the Robot will continue 
+		 * as if it had picked up the block and run a check with the controller to see if it has indeed.
+		 * This stops an unnecessary run through the pickUpBlock() function.
+		 */
+		 if(robotJointGetState(ROBOT_HAND) >= 66000)
+        {
+          ROBOT_HAS_BLOCK = true;
+        }
+        else 
+        {
+          ROBOT_HAS_BLOCK = false;
+        }
+        
+        if(STATE == EM_STOP || STATE == PAUSE)
+        {
+
+          break;
+        }
+        else{  
+          robotJointSetState(joint, direction);
+          OSTimeDly(10);
+        }
+      
+    }
+  
 }
   
+// Moves the robot to pre-determined positions for a pick up of a block on Pad1
 void pickUpPad1(void){
   
-        robotMoveJointTo(ROBOT_ELBOW, 83500);
+       /*robotMoveJointTo(ROBOT_ELBOW, 83500);
+        OSTimeDly(500);*/
+		robotMoveJointTo(ROBOT_HAND, 45000);
         OSTimeDly(500);
-        robotMoveJointTo(ROBOT_WAIST, 85000);
+        robotMoveJointTo(ROBOT_WAIST, 86500);
         OSTimeDly(500);
-        robotMoveJointTo(ROBOT_HAND, 45000);
-        OSTimeDly(500);
+
         robotMoveJointTo(ROBOT_WRIST, 90000);
         OSTimeDly(500); 
         robotMoveJointTo(ROBOT_ELBOW, 99500);
@@ -414,6 +426,7 @@ void pickUpPad1(void){
         OSTimeDly(500);
 }
 
+//Moves the robot to pre-determined positions moving it above the conveyor sensor1
 void moveAboveConveyor(void){
         
         robotMoveJointTo(ROBOT_HAND, 71000);
@@ -422,6 +435,7 @@ void moveAboveConveyor(void){
        
 }
 
+//Moves the robot to pre-determined positions to drop a block on the conveyor
 void dropBlockConveyor(void){
       robotMoveJointTo(ROBOT_ELBOW, 100000);
       OSTimeDly(500);
@@ -431,15 +445,120 @@ void dropBlockConveyor(void){
       
 }
 
+//Moves the robot to pre-determined positions, resseting it to a neutral position
 void setRobotStart(void){
+      robotMoveJointTo(ROBOT_HAND, 45000);
+      OSTimeDly(500);
       robotMoveJointTo(ROBOT_ELBOW, 87500);
       OSTimeDly(500);
       robotMoveJointTo(ROBOT_WAIST, 67250);  
       OSTimeDly(500);
       robotMoveJointTo(ROBOT_WRIST, 82250);
       OSTimeDly(500);
-      robotMoveJointTo(ROBOT_HAND, 68750);
+}
+
+/* Helper function to allow the system STATE to be set 
+ * Use of a semaphore ensures that the STATE can't be set
+ * by two tasks at the same time, removing the possibility of bugs
+ * where the STATE advances prematurely without the necessary operations
+ * for the previous STATE having been completed
+ *
+ * @param uint32_t NEWSTATE Takes this state and assigns the STATE value to
+ *                          it's value
+ * 
+*/
+void setState(uint32_t NEWSTATE)
+{
+    OSSemPend(STATEsem, 0, &error);
+    STATE = NEWSTATE;
+    error = OSSemPost(STATEsem); 
+}
+
+/*Function to send a message
+ * 
+ * @param uint32_t message Takes a CAN Message ID as parameter to be broadcast on CAN
+ */
+void sendMessage(uint32_t message)
+{
+  canMessage_t msg;
+  msg.id = message;//Assigns the message to the can message ID
+  canWrite(CAN_PORT_1, &msg);//Writes the can message with new ID to can 
+}
+
+/* Function to process a received message
+ *
+ * @param uint32_t msgID  Takes the message ID of the received message
+ *                        and based on how the ID corresponds to the 
+ *                        message Enumeration, sets the system state
+ *                        or in urgent cases sends a message out on the CAN
+ */
+void processMessage(uint32_t msgID)
+{
+  if(msgID == EM_STOP)
+  {
+    setState(EM_STOP);
+  }else
+  if(msgID == PAUSE)
+  {
+    LASTSTATE = STATE;
+    setState(PAUSE);
+  } else
+  if(msgID == RESET)
+  {
+    setState(RESET);
+  } else
+   if(msgID == RESUME)
+   {
+    setState(RESUME);
+   }
+  else
+    if(msgID == CTRL_STOP)
+    {
+      sendMessage(CTRL_STOP_ACK_ROB1);
+    }
+  //Start message response code
+  if(msgID == START && STATE < REQ_PICKUP_PAD1)
+  {
+    setState(START);
+    sendMessage(START_ACK_ROB1);
+  }
+  else if(msgID == REQ_PICKUP_PAD1 && STATE < REQ_PICKUP_PAD1)
+  {
+    setState(REQ_PICKUP_PAD1);
+  }
+  else if(msgID == ACK_CHK_PAD1_PICKUP)
+  {
+      setState(ACK_CHK_PAD1_PICKUP);
+      retries = 1;
+  }
+  else if(msgID == NACK_CHK_PAD1_PICKUP)
+  {
+        setState(NACK_CHK_PAD1_PICKUP);
+  }
+  else if(msgID == ACK_DROP_CONV && STATE < CHK_CONV_DROP && !ROBOT_MOVING)
+  {
+    setState(ACK_DROP_CONV);
+  }
+  else if(msgID == NACK_DROP_CONV)
+  {
+    OSTimeDly(500);
+    setState(REQ_DROP_CONV);
+  }
+  else if(msgID == ACK_CHK_CONV_DROP)
+  {
+    if(PAD1_WAITING && !ROBOT_HAS_BLOCK)
+    {
+      setState(REQ_PICKUP_PAD1);
+      PAD1_WAITING = false;
+    }else{setState(START);} 
+  }
+  else if(msgID == NACK_CHK_CONV_DROP)
+  {
+    nack_conv_recieved = true;
+    setState(ERR_ROB1);
+  }
+  
 }
 
 ;
-
+  
